@@ -1,4 +1,4 @@
-# 猛兽派对 - Beast Carnival
+# Beast Carnival
 
 一款AI驱动的互动游戏Demo，包含角色系统、AI对话、解谜游戏和智能狼人杀。
 
