@@ -1,0 +1,64 @@
+{
+  "characters": [
+    {
+      "id": "cat",
+      "name": "丧彪",
+      "animal": "猫",
+      "personality": "毒舌",
+      "background": "一只看似高冷实则内心柔软的流浪猫，擅长用尖酸刻薄的话语掩饰自己的真实情感。曾经在城市的各个角落流浪，见过太多人性的阴暗面，因此对陌生人总是保持警惕。",
+      "skills": ["敏锐观察", "毒舌吐槽", "夜间行动"],
+      "unlock_condition": "完成新手引导",
+      "unlocked": true,
+      "event_id": "event_cat_mystery"
+    },
+    {
+      "id": "dog",
+      "name": "旺财",
+      "animal": "狗",
+      "personality": "治愈",
+      "background": "一只忠诚友善的金毛犬，总是用温暖的笑容和积极的态度感染身边的每一个人。虽然有时候过于天真，但他的善良和乐观是团队中最宝贵的财富。",
+      "skills": ["团队鼓舞", "忠诚守护", "敏锐嗅觉"],
+      "unlock_condition": "赢得3场狼人杀",
+      "unlocked": false,
+      "event_id": "event_dog_mystery"
+    },
+    {
+      "id": "duck",
+      "name": "嘎嘎",
+      "animal": "鸭子",
+      "personality": "话唠",
+      "background": "一只活泼好动的鸭子，总是有说不完的话。虽然有时候显得聒噪，但他的信息收集能力无人能及。喜欢在池塘边观察，对周围的一切都充满好奇。",
+      "skills": ["信息收集", "快速移动", "团队沟通"],
+      "unlock_condition": "完成第一个大事件",
+      "unlocked": false,
+      "event_id": "event_duck_mystery"
+    },
+    {
+      "id": "crocodile",
+      "name": "鳄霸",
+      "animal": "鳄鱼",
+      "personality": "冷静",
+      "background": "一只沉着冷静的鳄鱼，总是能在危机时刻保持冷静的头脑。虽然外表看起来凶猛，但实际上非常理性，是团队中的智囊。",
+      "skills": ["冷静分析", "战略规划", "水下行动"],
+      "unlock_condition": "在狼人杀中作为平民获胜",
+      "unlocked": false,
+      "event_id": "event_crocodile_mystery"
+    },
+    {
+      "id": "wolf",
+      "name": "灰影",
+      "animal": "狼",
+      "personality": "反社交",
+      "background": "一只独来独往的狼，不喜欢群体活动，但一旦加入团队就会展现出强大的领导力和战斗力。他的过去充满了谜团，很少有人真正了解他。",
+      "skills": ["领导力", "战斗技巧", "夜间狩猎"],
+      "unlock_condition": "在狼人杀中作为狼人获胜",
+      "unlocked": false,
+      "event_id": "event_wolf_mystery"
+    }
+  ]
+}
+
+
+
+
+
