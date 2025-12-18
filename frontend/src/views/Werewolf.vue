@@ -169,6 +169,41 @@
           </div>
         </transition>
         
+        <!-- 角色解锁提示弹窗 -->
+        <transition name="character-unlock-modal">
+          <div v-if="characterUnlockModal.show" class="character-unlock-modal-overlay" @click.self="characterUnlockModal.show = false">
+            <div class="character-unlock-modal">
+              <div class="character-unlock-header">
+                <h2 class="character-unlock-title">🎉 新角色解锁！</h2>
+              </div>
+              <div class="character-unlock-content">
+                <div class="character-unlock-message">
+                  有新的角色解锁了，快去看看吧！
+                </div>
+                <div class="character-unlock-list">
+                  <div 
+                    v-for="character in characterUnlockModal.characters" 
+                    :key="character.id"
+                    class="character-unlock-item"
+                  >
+                    <div class="character-unlock-avatar">
+                      <span class="emoji">{{ getCharacterEmoji(character.animal) }}</span>
+                    </div>
+                    <div class="character-unlock-info">
+                      <div class="character-unlock-name">{{ character.name }}</div>
+                      <div class="character-unlock-animal">{{ character.animal }}</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="character-unlock-actions">
+                <button class="character-unlock-btn" @click="goToCharacters">查看角色</button>
+                <button class="character-unlock-close-btn" @click="characterUnlockModal.show = false">稍后查看</button>
+              </div>
+            </div>
+          </div>
+        </transition>
+        
         <!-- 退出游戏确认弹窗 -->
         <transition name="exit-confirm-modal">
           <div v-if="exitConfirmModal.show" class="exit-confirm-modal-overlay" @click.self="exitConfirmModal.show = false">
@@ -725,6 +760,11 @@ export default {
       show: false,
       winner: null, // 'wolves' 或 'villagers'
       winnerText: ''
+    })
+    // 角色解锁提示弹窗
+    const characterUnlockModal = ref({
+      show: false,
+      characters: [] // 解锁的角色列表
     })
     // 退出确认弹窗
     const exitConfirmModal = ref({
@@ -1481,6 +1521,24 @@ export default {
       return icons[role] || null
     }
     
+    // 获取角色动物对应的emoji
+    const getCharacterEmoji = (animal) => {
+      const emojiMap = {
+        '猫': '🐱',
+        '狗': '🐶',
+        '鸭子': '🦆',
+        '鳄鱼': '🐊',
+        '狼': '🐺'
+      }
+      return emojiMap[animal] || '🐾'
+    }
+    
+    // 跳转到角色页面
+    const goToCharacters = () => {
+      characterUnlockModal.value.show = false
+      router.push('/characters')
+    }
+    
     const getMessageAvatar = (msg) => {
       if (msg.type === 'system' || msg.type === 'identity' || !msg.username || msg.username === '系统') {
         return '🎭'
@@ -2044,6 +2102,20 @@ export default {
             winnerText: winner === 'wolves' ? '狼人阵营获胜！' : '好人阵营获胜！'
           }
         }
+        
+        // 检查是否有角色解锁
+        if (room.value && room.value.unlocked_characters) {
+          const unlockedChars = room.value.unlocked_characters[gameStore.userId]
+          if (unlockedChars && unlockedChars.length > 0) {
+            // 延迟显示解锁弹窗，让游戏结束弹窗先显示
+            setTimeout(() => {
+              characterUnlockModal.value = {
+                show: true,
+                characters: unlockedChars
+              }
+            }, 1000)
+          }
+        }
       } else if (newPhase && newPhase !== 'waiting' && newPhase !== 'game_over') {
         startTimer()
       } else {
@@ -2167,6 +2239,9 @@ export default {
       closeRoleInfo,
       roleInfoModal,
       gameOverModal,
+      characterUnlockModal,
+      getCharacterEmoji,
+      goToCharacters,
       alivePlayersForVoting,
       selectedVoteTarget,
       selectVoteTarget,
@@ -4802,6 +4877,192 @@ export default {
 
 .game-over-modal-leave-to .game-over-modal {
   transform: scale(0.8) translateY(30px);
+}
+
+/* 角色解锁提示弹窗样式 */
+.character-unlock-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10003;
+  backdrop-filter: blur(10px);
+}
+
+.character-unlock-modal {
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+  border: 3px solid rgba(255, 215, 0, 0.6);
+  border-radius: 25px;
+  box-shadow: 0 0 80px rgba(255, 215, 0, 0.6), inset 0 0 40px rgba(0, 0, 0, 0.6);
+  max-width: 600px;
+  width: 90%;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.character-unlock-header {
+  padding: 30px;
+  border-bottom: 2px solid rgba(255, 215, 0, 0.3);
+  background: rgba(0, 0, 0, 0.3);
+  text-align: center;
+}
+
+.character-unlock-title {
+  color: #ffd700;
+  font-size: 2em;
+  font-weight: bold;
+  margin: 0;
+  text-shadow: 0 0 15px rgba(255, 215, 0, 0.8);
+}
+
+.character-unlock-content {
+  padding: 40px 30px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 30px;
+  overflow-y: auto;
+}
+
+.character-unlock-message {
+  color: #ffffff;
+  font-size: 1.3em;
+  font-weight: 500;
+  text-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
+}
+
+.character-unlock-list {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  width: 100%;
+  max-width: 400px;
+}
+
+.character-unlock-item {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 20px;
+  background: rgba(255, 215, 0, 0.1);
+  border: 2px solid rgba(255, 215, 0, 0.3);
+  border-radius: 15px;
+  transition: all 0.3s ease;
+}
+
+.character-unlock-item:hover {
+  background: rgba(255, 215, 0, 0.2);
+  border-color: rgba(255, 215, 0, 0.5);
+  transform: translateY(-3px);
+  box-shadow: 0 5px 20px rgba(255, 215, 0, 0.3);
+}
+
+.character-unlock-avatar {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #ffd700 0%, #ffed4e 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2em;
+  box-shadow: 0 4px 15px rgba(255, 215, 0, 0.4);
+  flex-shrink: 0;
+}
+
+.character-unlock-info {
+  flex: 1;
+  text-align: left;
+}
+
+.character-unlock-name {
+  color: #ffffff;
+  font-size: 1.3em;
+  font-weight: bold;
+  margin-bottom: 5px;
+  text-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
+}
+
+.character-unlock-animal {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 1em;
+}
+
+.character-unlock-actions {
+  padding: 30px;
+  border-top: 2px solid rgba(255, 215, 0, 0.3);
+  background: rgba(0, 0, 0, 0.3);
+  display: flex;
+  gap: 15px;
+  justify-content: center;
+}
+
+.character-unlock-btn,
+.character-unlock-close-btn {
+  padding: 12px 30px;
+  border: none;
+  border-radius: 10px;
+  font-size: 1em;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.character-unlock-btn {
+  background: linear-gradient(135deg, #ffd700 0%, #ffed4e 100%);
+  color: #1a1a2e;
+  box-shadow: 0 4px 15px rgba(255, 215, 0, 0.4);
+}
+
+.character-unlock-btn:hover {
+  background: linear-gradient(135deg, #ffed4e 0%, #ffd700 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(255, 215, 0, 0.6);
+}
+
+.character-unlock-close-btn {
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+}
+
+.character-unlock-close-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.5);
+  transform: translateY(-2px);
+}
+
+/* 角色解锁弹窗动画 */
+.character-unlock-modal-enter-active {
+  transition: all 0.3s ease;
+}
+
+.character-unlock-modal-leave-active {
+  transition: all 0.3s ease;
+}
+
+.character-unlock-modal-enter-from {
+  opacity: 0;
+}
+
+.character-unlock-modal-enter-from .character-unlock-modal {
+  transform: scale(0.9) translateY(-20px);
+}
+
+.character-unlock-modal-leave-to {
+  opacity: 0;
+}
+
+.character-unlock-modal-leave-to .character-unlock-modal {
+  transform: scale(0.9) translateY(20px);
 }
 
 /* 退出确认弹窗样式 */

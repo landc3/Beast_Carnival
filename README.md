@@ -135,6 +135,7 @@ npm run dev
 ```
 
 前端服务将在 `http://localhost:4399` 启动
+多玩家访问：`http://本机ipv4地址:4399`
 
 ## 功能说明
 

@@ -15,6 +15,7 @@ if str(backend_dir) not in sys.path:
 from models.game import GameRoom, Player, GamePhase, PlayerRole
 from services.redis_service import redis_service
 from services.ai_service import AIService
+from services.character_service import character_service
 
 # 配置日志 - 只使用根 logger，避免重复输出
 logger = logging.getLogger(__name__)
@@ -2725,20 +2726,76 @@ class WerewolfService:
         villagers = [p for p in alive_players if p.role == PlayerRole.VILLAGER]
         all_good = [p for p in alive_players if p.role != PlayerRole.WOLF]
         
+        game_ended = False
+        winner = None
+        
         # 狼人胜利条件：所有神职死亡 或 所有平民死亡
         if len(gods) == 0 or len(villagers) == 0:
             room.winner = "wolves"
             room.phase = GamePhase.GAME_OVER
             await self._set_phase_time(room)
             await self._ai_announce(room.room_id, "游戏结束！狼人阵营获胜！")
+            game_ended = True
+            winner = "wolves"
         # 好人胜利条件：所有狼人死亡
         elif len(wolves) == 0:
             room.winner = "villagers"
             room.phase = GamePhase.GAME_OVER
             await self._set_phase_time(room)
             await self._ai_announce(room.room_id, "游戏结束！好人阵营获胜！")
+            game_ended = True
+            winner = "villagers"
         
-        await redis_service.set_room_data(room.room_id, room.model_dump())
+        # 如果游戏结束，更新用户胜利统计并检查角色解锁
+        if game_ended and winner:
+            # 存储每个用户解锁的角色信息 {user_id: [unlocked_characters]}
+            unlocked_characters_by_user = {}
+            
+            # 遍历所有真实玩家（非AI）
+            for player in room.players:
+                if player.is_ai:
+                    continue
+                
+                user_id = player.user_id
+                user_data = await redis_service.get_user_data(user_id) or {}
+                
+                # 判断玩家是否获胜
+                player_won = False
+                if winner == "wolves" and player.role == PlayerRole.WOLF:
+                    player_won = True
+                elif winner == "villagers" and player.role != PlayerRole.WOLF:
+                    player_won = True
+                
+                if player_won:
+                    # 更新胜利统计
+                    if player.role == PlayerRole.WOLF:
+                        wolf_wins = user_data.get("wolf_wins", 0)
+                        user_data["wolf_wins"] = wolf_wins + 1
+                        logger.info(f"【胜利统计】用户 {user_id} 作为狼人获胜，当前狼人胜利次数: {wolf_wins + 1}")
+                    else:
+                        villager_wins = user_data.get("villager_wins", 0)
+                        user_data["villager_wins"] = villager_wins + 1
+                        logger.info(f"【胜利统计】用户 {user_id} 作为平民获胜，当前平民胜利次数: {villager_wins + 1}")
+                    
+                    # 更新总胜利次数
+                    werewolf_wins = user_data.get("werewolf_wins", 0)
+                    user_data["werewolf_wins"] = werewolf_wins + 1
+                    
+                    # 保存用户数据
+                    await redis_service.set_user_data(user_id, user_data)
+                    
+                    # 检查并解锁符合条件的角色
+                    unlocked_characters = await character_service.check_and_unlock_characters(user_id)
+                    if unlocked_characters:
+                        unlocked_characters_by_user[user_id] = unlocked_characters
+                        logger.info(f"【角色解锁】用户 {user_id} 解锁了 {len(unlocked_characters)} 个角色: {[c['name'] for c in unlocked_characters]}")
+            
+            # 将解锁的角色信息存储到房间数据中
+            room_data = room.model_dump()
+            room_data["unlocked_characters"] = unlocked_characters_by_user
+            await redis_service.set_room_data(room.room_id, room_data)
+        else:
+            await redis_service.set_room_data(room.room_id, room.model_dump())
 
 werewolf_service = WerewolfService()
 

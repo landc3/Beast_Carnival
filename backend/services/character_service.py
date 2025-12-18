@@ -85,6 +85,32 @@ class CharacterService:
         
         return False
     
+    async def check_and_unlock_characters(self, user_id: str) -> List[Dict]:
+        """检查并解锁符合条件的角色，返回新解锁的角色列表"""
+        unlocked_characters = []
+        user_data = await redis_service.get_user_data(user_id) or {}
+        unlocked_ids = user_data.get("unlocked_characters", ["cat"]) if user_data else ["cat"]
+        
+        # 遍历所有角色，检查是否有需要解锁的
+        for character_id, character in self.characters.items():
+            # 如果已经解锁，跳过
+            if character_id in unlocked_ids:
+                continue
+            
+            # 检查解锁条件
+            can_unlock = await self.check_unlock_condition(user_id, character_id)
+            if can_unlock:
+                # 解锁角色
+                success = await self.unlock_character(user_id, character_id)
+                if success:
+                    unlocked_characters.append({
+                        "id": character_id,
+                        "name": character["name"],
+                        "animal": character["animal"]
+                    })
+        
+        return unlocked_characters
+    
     async def get_character_memory(self, user_id: str, character_id: str) -> CharacterMemory:
         """获取角色对话记忆"""
         key = f"character_memory:{user_id}:{character_id}"

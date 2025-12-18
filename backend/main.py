@@ -150,6 +150,18 @@ class ConnectionManager:
 
 manager = ConnectionManager()
 
+async def get_room_data_with_extras(room_id: str):
+    """获取房间数据，包含额外字段（如unlocked_characters）"""
+    room = await werewolf_service.get_room(room_id)
+    if room:
+        room_data = room.model_dump()
+        # 从Redis获取完整的房间数据，包含额外字段
+        full_room_data = await redis_service.get_room_data(room_id)
+        if full_room_data and "unlocked_characters" in full_room_data:
+            room_data["unlocked_characters"] = full_room_data["unlocked_characters"]
+        return room_data
+    return None
+
 # 启动事件处理器
 @app.on_event("startup")
 async def startup_event():
@@ -464,11 +476,13 @@ async def start_werewolf_game(room_id: str, background_tasks: BackgroundTasks):
             # 广播房间更新和消息
             room = await werewolf_service.get_room(room_id)
             if room:
-                # 广播房间状态更新
-                await manager.broadcast(json.dumps({
-                    "type": "room_update",
-                    "room": room.model_dump()
-                }), f"werewolf_{room_id}")
+                # 广播房间状态更新（包含unlocked_characters字段）
+                room_data = await get_room_data_with_extras(room_id)
+                if room_data:
+                    await manager.broadcast(json.dumps({
+                        "type": "room_update",
+                        "room": room_data
+                    }), f"werewolf_{room_id}")
                 
                 # 确保所有已连接的玩家都能收到私有消息
                 # 从 Redis 获取所有私有消息并发送给对应的玩家
@@ -521,9 +535,9 @@ async def start_werewolf_game(room_id: str, background_tasks: BackgroundTasks):
 @app.get("/api/werewolf/room/{room_id}")
 async def get_werewolf_room(room_id: str):
     """获取房间信息"""
-    room = await werewolf_service.get_room(room_id)
-    if room:
-        return room.model_dump()
+    room_data = await get_room_data_with_extras(room_id)
+    if room_data:
+        return room_data
     raise HTTPException(status_code=404, detail="房间不存在")
 
 @app.post("/api/werewolf/room/{room_id}/add-ai")
@@ -551,11 +565,13 @@ async def werewolf_game(websocket: WebSocket, room_id: str, user_id: str):
             await websocket.send_text(json.dumps({"error": "房间不存在"}))
             return
         
-        # 发送房间状态
-        await websocket.send_text(json.dumps({
-            "type": "room_state",
-            "room": room.model_dump()
-        }))
+        # 发送房间状态（包含额外字段）
+        room_data = await get_room_data_with_extras(room_id)
+        if room_data:
+            await websocket.send_text(json.dumps({
+                "type": "room_state",
+                "room": room_data
+            }))
         
         # 发送私有消息
         private_messages = await redis_service.get_private_messages(room_id, user_id)
@@ -627,11 +643,13 @@ async def werewolf_game(websocket: WebSocket, room_id: str, user_id: str):
                             "content": latest_message
                         }), f"werewolf_{room_id}")
                     
-                    # 广播房间更新
-                    await manager.broadcast(json.dumps({
-                        "type": "room_update",
-                        "room": room.model_dump()
-                    }), f"werewolf_{room_id}")
+                    # 广播房间更新（包含额外字段）
+                    room_data = await get_room_data_with_extras(room_id)
+                    if room_data:
+                        await manager.broadcast(json.dumps({
+                            "type": "room_update",
+                            "room": room_data
+                        }), f"werewolf_{room_id}")
                     
                     # 触发AI玩家自动回复
                     if room.phase == "day":
@@ -664,10 +682,12 @@ async def werewolf_game(websocket: WebSocket, room_id: str, user_id: str):
                             "content": latest_message
                         }), f"werewolf_{room_id}")
                     
-                    await manager.broadcast(json.dumps({
-                        "type": "room_update",
-                        "room": room.model_dump()
-                    }), f"werewolf_{room_id}")
+                    room_data = await get_room_data_with_extras(room_id)
+                    if room_data:
+                        await manager.broadcast(json.dumps({
+                            "type": "room_update",
+                            "room": room_data
+                        }), f"werewolf_{room_id}")
             
             elif action_type == "hunter_shot":
                 # 猎人开枪
@@ -687,18 +707,20 @@ async def werewolf_game(websocket: WebSocket, room_id: str, user_id: str):
                             "content": latest_message
                         }), f"werewolf_{room_id}")
                     
-                    await manager.broadcast(json.dumps({
-                        "type": "room_update",
-                        "room": room.model_dump()
-                    }), f"werewolf_{room_id}")
+                    room_data = await get_room_data_with_extras(room_id)
+                    if room_data:
+                        await manager.broadcast(json.dumps({
+                            "type": "room_update",
+                            "room": room_data
+                        }), f"werewolf_{room_id}")
             
             # 广播更新（用于其他类型的action）
             if action_type not in ["message", "last_words", "hunter_shot"]:
-                room = await werewolf_service.get_room(room_id)
-                if room:
+                room_data = await get_room_data_with_extras(room_id)
+                if room_data:
                     await manager.broadcast(json.dumps({
                         "type": "room_update",
-                        "room": room.model_dump()
+                        "room": room_data
                     }), f"werewolf_{room_id}")
     
     except WebSocketDisconnect:
