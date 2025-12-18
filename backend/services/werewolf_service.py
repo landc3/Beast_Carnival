@@ -1,7 +1,16 @@
 import random
 import uuid
 import time
+import sys
+import os
+from pathlib import Path
 from typing import List, Dict, Optional
+
+# 添加 backend 目录到 Python 路径，以便正确导入模块
+backend_dir = Path(__file__).parent.parent
+if str(backend_dir) not in sys.path:
+    sys.path.insert(0, str(backend_dir))
+
 from models.game import GameRoom, Player, GamePhase, PlayerRole
 from services.redis_service import redis_service
 from services.ai_service import AIService

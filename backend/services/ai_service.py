@@ -1,6 +1,14 @@
 import dashscope
 from dashscope import Generation
+import sys
+from pathlib import Path
 from typing import List, Dict, Optional
+
+# 添加 backend 目录到 Python 路径，以便正确导入模块
+backend_dir = Path(__file__).parent.parent
+if str(backend_dir) not in sys.path:
+    sys.path.insert(0, str(backend_dir))
+
 from config import config
 
 dashscope.api_key = config.DASHSCOPE_API_KEY
