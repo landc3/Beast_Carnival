@@ -17,16 +17,35 @@
             v-for="char in unlocked" 
             :key="char.id"
             class="character-card unlocked"
-            @click="openChat(char.id)"
+            :class="{ 'flipped': flippedCards[char.id] }"
+            @click="toggleCard(char.id)"
           >
-            <div class="character-avatar">
-              <span class="emoji">{{ getEmoji(char.animal) }}</span>
+            <div class="character-card-inner">
+              <!-- 正面：显示角色信息 -->
+              <div class="character-card-front">
+                <div class="card-front-content">
+                  <div class="card-front-pattern"></div>
+                  <div class="card-front-content-inner">
+                    <div class="character-avatar">
+                      <span class="emoji">{{ getEmoji(char.animal) }}</span>
+                    </div>
+                    <h3>{{ char.name }}</h3>
+                    <p class="animal">{{ char.animal }}</p>
+                    <p class="personality">{{ char.personality }}</p>
+                    <button class="btn-chat" @click.stop="openChat(char.id)">开始对话</button>
+                    <button class="btn-profile" @click.stop="showProfile(char)">查看档案</button>
+                  </div>
+                </div>
+              </div>
+              <!-- 背面：Beast Carnival 样式 -->
+              <div class="character-card-back">
+                <div class="card-back-content">
+                  <div class="rose-decoration"></div>
+                  <div class="beast-carnival-text">Beast Carnival</div>
+                  <div class="card-back-pattern"></div>
+                </div>
+              </div>
             </div>
-            <h3>{{ char.name }}</h3>
-            <p class="animal">{{ char.animal }}</p>
-            <p class="personality">{{ char.personality }}</p>
-            <button class="btn-chat">开始对话</button>
-            <button class="btn-profile" @click.stop="showProfile(char)">查看档案</button>
           </div>
         </div>
       </div>
@@ -45,14 +64,16 @@
             @mouseenter="showUnlockHint = char.id"
             @mouseleave="showUnlockHint = null"
           >
-            <div class="character-avatar locked">
-              <span class="emoji">{{ getEmoji(char.animal) }}</span>
-              <div class="lock-overlay">🔒</div>
-            </div>
-            <h3>{{ char.name }}</h3>
-            <p class="animal">{{ char.animal }}</p>
-            <div v-if="showUnlockHint === char.id" class="unlock-hint">
-              {{ char.unlock_condition }}
+            <div class="locked-card-content">
+              <div class="character-avatar locked">
+                <span class="emoji">{{ getEmoji(char.animal) }}</span>
+                <div class="lock-overlay">🔒</div>
+              </div>
+              <h3>{{ char.name }}</h3>
+              <p class="animal">{{ char.animal }}</p>
+              <div v-if="showUnlockHint === char.id" class="unlock-hint">
+                {{ char.unlock_condition }}
+              </div>
             </div>
           </div>
         </div>
@@ -91,6 +112,7 @@ export default {
     const locked = ref([])
     const selectedCharacter = ref(null)
     const showUnlockHint = ref(null)
+    const flippedCards = ref({})
     
     const emojiMap = {
       '猫': '🐱',
@@ -120,6 +142,10 @@ export default {
       selectedCharacter.value = character
     }
     
+    const toggleCard = (characterId) => {
+      flippedCards.value[characterId] = !flippedCards.value[characterId]
+    }
+    
     onMounted(loadCharacters)
     
     return {
@@ -127,9 +153,11 @@ export default {
       locked,
       selectedCharacter,
       showUnlockHint,
+      flippedCards,
       getEmoji,
       openChat,
-      showProfile
+      showProfile,
+      toggleCard
     }
   }
 }
@@ -139,12 +167,16 @@ export default {
 .characters {
   min-height: calc(100vh - 80px);
   padding: 20px 15px 100px;
-  background: #0a0a0a;
-  background-image: 
-    radial-gradient(circle at 1px 1px, rgba(255,255,255,0.15) 1px, transparent 0);
-  background-size: 20px 20px;
+  background: transparent;
   overflow-y: auto;
   overflow-x: hidden;
+  /* 隐藏滚动条但保持滚动功能 */
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE and Edge */
+}
+
+.characters::-webkit-scrollbar {
+  display: none; /* Chrome, Safari, Opera */
 }
 
 .header {
@@ -206,6 +238,64 @@ export default {
     grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
     gap: 15px;
   }
+  
+  .character-card {
+    min-height: 220px;
+    max-height: 260px;
+  }
+  
+  .character-card-inner {
+    min-height: 220px;
+    max-height: 260px;
+  }
+  
+  .character-avatar {
+    width: 60px;
+    height: 60px;
+    font-size: 1.8em;
+  }
+  
+  .card-front-content-inner {
+    padding: 10px 8px;
+    gap: 4px;
+  }
+  
+  .locked-card-content {
+    padding: 10px 8px;
+    gap: 4px;
+  }
+  
+  .character-card h3 {
+    font-size: 0.9em;
+  }
+  
+  .character-card.locked h3 {
+    font-size: 0.85em;
+  }
+  
+  .animal {
+    font-size: 0.7em;
+  }
+  
+  .character-card.locked .animal {
+    font-size: 0.65em;
+  }
+  
+  .personality {
+    font-size: 0.65em;
+    padding: 2px 6px;
+  }
+  
+  .btn-chat,
+  .btn-profile {
+    padding: 5px 6px;
+    font-size: 0.7em;
+  }
+  
+  .unlock-hint {
+    font-size: 0.65em;
+    padding: 5px 6px;
+  }
 }
 
 @media (min-width: 1400px) {
@@ -213,34 +303,140 @@ export default {
     grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
     gap: 20px;
   }
+  
+  .character-card {
+    min-height: 260px;
+    max-height: 300px;
+  }
+  
+  .character-card-inner {
+    min-height: 260px;
+    max-height: 300px;
+  }
 }
 
 .character-card {
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 12px;
-  padding: 16px 12px;
+  padding: 0;
   text-align: center;
   cursor: pointer;
   transition: all 0.3s ease;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
   min-height: 240px;
+  max-height: 280px;
   position: relative;
+  perspective: 1000px;
+  overflow: hidden;
 }
 
 .character-card.unlocked:hover {
-  transform: translateY(-8px);
-  background: rgba(255, 255, 255, 0.08);
   border-color: rgba(102, 126, 234, 0.5);
   box-shadow: 0 12px 40px rgba(102, 126, 234, 0.2);
+}
+
+.character-card.unlocked:hover .character-card-inner {
+  transform: translateY(-8px);
+}
+
+.character-card.unlocked.flipped:hover .character-card-inner {
+  transform: translateY(-8px) rotateY(180deg);
+}
+
+.character-card-inner {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  transform-style: preserve-3d;
+  transition: transform 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+  min-height: 240px;
+  max-height: 280px;
+  box-sizing: border-box;
+}
+
+.character-card.flipped .character-card-inner {
+  transform: rotateY(180deg);
+}
+
+.character-card-front,
+.character-card-back {
+  width: 100%;
+  height: 100%;
+  position: absolute;
+  backface-visibility: hidden;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.character-card-back {
+  transform: rotateY(180deg);
+}
+
+.card-front-content {
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  position: relative;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+  box-sizing: border-box;
+  overflow: hidden;
+  border: 1px solid rgba(212, 175, 55, 0.2);
+}
+
+.character-card.unlocked:hover .card-front-content {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(212, 175, 55, 0.4);
+}
+
+.card-front-pattern {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-image: 
+    radial-gradient(circle at 20% 20%, rgba(212, 175, 55, 0.08) 0%, transparent 40%),
+    radial-gradient(circle at 80% 80%, rgba(212, 175, 55, 0.08) 0%, transparent 40%),
+    repeating-linear-gradient(
+      45deg,
+      transparent,
+      transparent 8px,
+      rgba(212, 175, 55, 0.03) 8px,
+      rgba(212, 175, 55, 0.03) 16px
+    ),
+    repeating-linear-gradient(
+      -45deg,
+      transparent,
+      transparent 8px,
+      rgba(212, 175, 55, 0.02) 8px,
+      rgba(212, 175, 55, 0.02) 16px
+    );
+  opacity: 0.6;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.card-front-content-inner {
+  width: 100%;
+  height: 100%;
+  padding: 12px 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 6px;
+  position: relative;
+  z-index: 2;
 }
 
 .character-card.locked {
   opacity: 0.5;
   cursor: default;
   position: relative;
+  min-height: 240px;
+  max-height: 280px;
+  overflow: hidden;
 }
 
 .character-card.locked:hover {
@@ -249,16 +445,29 @@ export default {
   border-color: rgba(255, 255, 255, 0.15);
 }
 
+.locked-card-content {
+  width: 100%;
+  height: 100%;
+  padding: 12px 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 6px;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
 .character-avatar {
-  width: 80px;
-  height: 80px;
-  margin: 0 auto 12px;
+  width: 70px;
+  height: 70px;
+  margin: 0 auto 0;
   border-radius: 50%;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 2.5em;
+  font-size: 2.2em;
   position: relative;
   box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
   flex-shrink: 0;
@@ -267,6 +476,11 @@ export default {
 .character-avatar.locked {
   filter: grayscale(80%);
   opacity: 0.6;
+  width: 70px;
+  height: 70px;
+  margin: 0 auto 0;
+  font-size: 2.2em;
+  flex-shrink: 0;
 }
 
 .lock-overlay {
@@ -285,43 +499,76 @@ export default {
 }
 
 .character-card h3 {
-  font-size: 1.1em;
+  font-size: 1em;
   color: #ffffff;
-  margin-bottom: 6px;
+  margin: 0;
   font-weight: 600;
-  line-height: 1.3;
+  line-height: 1.2;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+  padding: 0 4px;
+  flex-shrink: 0;
+}
+
+.character-card.locked h3 {
+  font-size: 0.95em;
 }
 
 .animal {
   color: rgba(255, 255, 255, 0.6);
-  font-size: 0.85em;
-  margin-bottom: 5px;
+  font-size: 0.75em;
+  margin: 0;
+  line-height: 1.2;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+  padding: 0 4px;
+  flex-shrink: 0;
+}
+
+.character-card.locked .animal {
+  font-size: 0.7em;
 }
 
 .personality {
   color: #667eea;
   font-weight: 500;
-  font-size: 0.8em;
-  margin-bottom: 12px;
-  padding: 3px 10px;
+  font-size: 0.7em;
+  margin: 0;
+  padding: 2px 8px;
   background: rgba(102, 126, 234, 0.15);
-  border-radius: 10px;
+  border-radius: 8px;
   display: inline-block;
+  line-height: 1.3;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: calc(100% - 16px);
 }
 
 .btn-chat {
-  width: 100%;
-  padding: 8px;
+  width: calc(100% - 8px);
+  padding: 6px 8px;
   background: linear-gradient(135deg, #667eea 0%, #5568d3 100%);
   color: white;
   border: none;
   border-radius: 6px;
   cursor: pointer;
-  font-size: 0.85em;
+  font-size: 0.75em;
   margin-top: auto;
   transition: all 0.3s;
   font-weight: 500;
   box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+  flex-shrink: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .btn-chat:hover {
@@ -335,18 +582,22 @@ export default {
 }
 
 .btn-profile {
-  width: 100%;
-  padding: 8px;
+  width: calc(100% - 8px);
+  padding: 6px 8px;
   background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
   color: white;
   border: none;
   border-radius: 6px;
   cursor: pointer;
-  font-size: 0.85em;
-  margin-top: 6px;
+  font-size: 0.75em;
+  margin-top: 4px;
   transition: all 0.3s;
   font-weight: 500;
   box-shadow: 0 2px 8px rgba(72, 187, 120, 0.3);
+  flex-shrink: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .btn-profile:hover {
@@ -360,15 +611,24 @@ export default {
 }
 
 .unlock-hint {
-  margin-top: 10px;
-  padding: 8px 10px;
+  margin-top: auto;
+  padding: 6px 8px;
   background: rgba(255, 215, 0, 0.15);
   border: 1px solid rgba(255, 215, 0, 0.4);
   border-radius: 6px;
   color: #ffd700;
-  font-size: 0.75em;
-  line-height: 1.4;
+  font-size: 0.7em;
+  line-height: 1.3;
   animation: fadeIn 0.3s ease;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  white-space: normal;
+  max-width: calc(100% - 16px);
+  flex-shrink: 0;
 }
 
 @keyframes fadeIn {
@@ -497,6 +757,124 @@ export default {
   font-size: 0.85em !important;
   color: rgba(255, 255, 255, 0.4) !important;
   margin-top: 8px;
+}
+
+/* 卡片背面样式 - Beast Carnival */
+.card-back-content {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: 
+    linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 50%, #0a0a0a 100%),
+    repeating-linear-gradient(
+      45deg,
+      transparent,
+      transparent 10px,
+      rgba(0, 0, 0, 0.15) 10px,
+      rgba(0, 0, 0, 0.15) 20px
+    );
+  background-blend-mode: overlay;
+  border: 3px solid #d4af37;
+  border-radius: 12px;
+  box-shadow: 
+    inset 0 0 30px rgba(212, 175, 55, 0.4),
+    inset 0 2px 4px rgba(212, 175, 55, 0.2),
+    0 0 25px rgba(212, 175, 55, 0.3),
+    0 4px 8px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+}
+
+.rose-decoration {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 80%;
+  height: 60%;
+  z-index: 3;
+  pointer-events: none;
+  opacity: 0.7;
+}
+
+.rose-decoration::before {
+  content: '🌹';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) rotate(-15deg) scale(2.5);
+  font-size: 3em;
+  filter: drop-shadow(0 0 8px rgba(220, 20, 60, 0.8)) 
+          drop-shadow(0 0 15px rgba(220, 20, 60, 0.6))
+          drop-shadow(0 0 25px rgba(220, 20, 60, 0.4));
+  animation: roseGlow 3s ease-in-out infinite;
+}
+
+@keyframes roseGlow {
+  0%, 100% {
+    opacity: 0.7;
+    transform: translate(-50%, -50%) rotate(-15deg) scale(2.5);
+  }
+  50% {
+    opacity: 0.9;
+    transform: translate(-50%, -50%) rotate(-12deg) scale(2.6);
+  }
+}
+
+.beast-carnival-text {
+  font-family: 'Georgia', 'Times New Roman', serif;
+  font-size: 0.85em;
+  font-weight: bold;
+  color: #d4af37;
+  text-align: center;
+  letter-spacing: 3px;
+  text-shadow: 
+    0 0 15px rgba(212, 175, 55, 1),
+    0 0 30px rgba(212, 175, 55, 0.6),
+    0 0 45px rgba(212, 175, 55, 0.3),
+    2px 2px 6px rgba(0, 0, 0, 0.9);
+  z-index: 4;
+  position: relative;
+  padding: 0 8px;
+  line-height: 1.3;
+  transform: perspective(500px) rotateX(5deg);
+  background: linear-gradient(180deg, 
+    rgba(212, 175, 55, 1) 0%, 
+    rgba(184, 134, 11, 1) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.8));
+}
+
+.card-back-pattern {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-image: 
+    radial-gradient(circle at 20% 30%, rgba(212, 175, 55, 0.15) 0%, transparent 50%),
+    radial-gradient(circle at 80% 70%, rgba(212, 175, 55, 0.15) 0%, transparent 50%),
+    repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(212, 175, 55, 0.08) 2px,
+      rgba(212, 175, 55, 0.08) 4px
+    ),
+    repeating-linear-gradient(
+      90deg,
+      transparent,
+      transparent 2px,
+      rgba(212, 175, 55, 0.05) 2px,
+      rgba(212, 175, 55, 0.05) 4px
+    );
+  opacity: 0.7;
+  z-index: 1;
 }
 </style>
 

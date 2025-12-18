@@ -1,6 +1,7 @@
 from pydantic import BaseModel
 from typing import List, Optional, Dict
 from enum import Enum
+from datetime import datetime
 
 class GamePhase(str, Enum):
     WAITING = "waiting"  # 等待玩家
@@ -26,6 +27,7 @@ class Player(BaseModel):
     alive: bool = True
     voted: bool = False
     vote_target: Optional[str] = None
+    is_ai: bool = False  # 是否为AI玩家
     # 守卫相关
     guarded: bool = False  # 是否被守卫守护
     guard_target: Optional[str] = None  # 守卫守护的目标（用于检查连续守护）
@@ -39,6 +41,8 @@ class Player(BaseModel):
     witch_poison_used: bool = False  # 女巫毒药是否已使用
     # 猎人相关
     hunter_shot_used: bool = False  # 猎人是否已开枪
+    # 死亡相关
+    died_by: Optional[str] = None  # 死亡原因：'wolf', 'vote', 'poison', 'hunter'等
 
 class GameRoom(BaseModel):
     room_id: str
@@ -54,6 +58,10 @@ class GameRoom(BaseModel):
     current_night_phase: Optional[str] = None  # 当前夜晚子阶段（guard/wolf/seer/witch）
     eliminated_tonight: Optional[str] = None  # 今晚被击杀的玩家
     saved_tonight: Optional[str] = None  # 今晚被救的玩家
+    # 时间限制相关
+    phase_start_time: Optional[float] = None  # 阶段开始时间（Unix时间戳）
+    phase_duration: Optional[int] = None  # 阶段持续时间（秒）
+    can_speak: bool = False  # 是否允许发言
 
 
 

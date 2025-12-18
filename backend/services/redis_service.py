@@ -1,5 +1,6 @@
 import redis
 import json
+import asyncio
 from typing import Optional, Dict, Any, List
 from config import config
 
@@ -11,18 +12,29 @@ class RedisService:
             host=config.REDIS_HOST,
             port=config.REDIS_PORT,
             db=config.REDIS_DB,
-            decode_responses=True
+            decode_responses=True,
+            socket_connect_timeout=5,
+            socket_timeout=5,
+            retry_on_timeout=True,
+            health_check_interval=30
         )
+        # 测试连接
+        try:
+            self.redis_client.ping()
+        except redis.ConnectionError as e:
+            print(f"警告: Redis连接失败: {e}")
+            print("请确保Redis服务正在运行")
     
     async def set(self, key: str, value: Any, ex: Optional[int] = None):
         """设置键值"""
         if isinstance(value, (dict, list)):
             value = json.dumps(value, ensure_ascii=False)
-        self.redis_client.set(key, value, ex=ex)
+        # 使用 asyncio.to_thread 将同步操作转换为异步
+        await asyncio.to_thread(self.redis_client.set, key, value, ex=ex)
     
     async def get(self, key: str) -> Optional[str]:
         """获取值"""
-        value = self.redis_client.get(key)
+        value = await asyncio.to_thread(self.redis_client.get, key)
         if value:
             try:
                 return json.loads(value)
@@ -32,11 +44,12 @@ class RedisService:
     
     async def delete(self, key: str):
         """删除键"""
-        self.redis_client.delete(key)
+        await asyncio.to_thread(self.redis_client.delete, key)
     
     async def exists(self, key: str) -> bool:
         """检查键是否存在"""
-        return bool(self.redis_client.exists(key))
+        result = await asyncio.to_thread(self.redis_client.exists, key)
+        return bool(result)
     
     async def set_user_data(self, user_id: str, data: Dict):
         """设置用户数据"""

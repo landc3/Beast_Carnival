@@ -168,10 +168,7 @@ export default {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
-  background: #0a0a0a;
-  background-image: 
-    radial-gradient(circle at 1px 1px, rgba(255,255,255,0.15) 1px, transparent 0);
-  background-size: 20px 20px;
+  background: transparent;
   padding-bottom: 80px;
 }
 

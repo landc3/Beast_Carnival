@@ -70,13 +70,9 @@ export default {
 
 <style scoped>
 .events {
-  height: 100vh;
+  min-height: 100vh;
   padding: 40px 20px 100px;
-  background: #0a0a0a;
-  background-image: 
-    radial-gradient(circle at 1px 1px, rgba(255,255,255,0.15) 1px, transparent 0);
-  background-size: 20px 20px;
-  overflow: hidden;
+  background: transparent;
   box-sizing: border-box;
 }
 

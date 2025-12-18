@@ -12,7 +12,24 @@
           :key="index"
           :class="['message', msg.role]"
         >
-          <div class="message-content">{{ msg.content }}</div>
+          <template v-if="msg.role === 'assistant'">
+            <div class="message-avatar">
+              <span class="avatar-icon">{{ getAvatar(msg.role) }}</span>
+            </div>
+            <div class="message-wrapper">
+              <div class="message-name">{{ getName(msg.role) }}</div>
+              <div class="message-content">{{ msg.content }}</div>
+            </div>
+          </template>
+          <template v-else>
+            <div class="message-wrapper">
+              <div class="message-name">{{ getName(msg.role) }}</div>
+              <div class="message-content">{{ msg.content }}</div>
+            </div>
+            <div class="message-avatar">
+              <span class="avatar-icon">{{ getAvatar(msg.role) }}</span>
+            </div>
+          </template>
         </div>
       </div>
       
@@ -131,12 +148,37 @@ export default {
       }
     })
     
+    const getAvatar = (role) => {
+      if (role === 'assistant') {
+        const emojiMap = {
+          '猫': '🐱',
+          '狗': '🐶',
+          '鸭子': '🦆',
+          '鳄鱼': '🐊',
+          '狼': '🐺'
+        }
+        return emojiMap[character.value?.animal] || '🐾'
+      } else {
+        return '👤'
+      }
+    }
+    
+    const getName = (role) => {
+      if (role === 'assistant') {
+        return character.value?.name || '角色'
+      } else {
+        return gameStore.username || '玩家'
+      }
+    }
+    
     return {
       character,
       messages,
       inputMessage,
       messagesContainer,
-      sendMessage
+      sendMessage,
+      getAvatar,
+      getName
     }
   }
 }
@@ -147,10 +189,7 @@ export default {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
-  background: #0a0a0a;
-  background-image: 
-    radial-gradient(circle at 1px 1px, rgba(255,255,255,0.15) 1px, transparent 0);
-  background-size: 20px 20px;
+  background: transparent;
   padding-bottom: 80px;
 }
 
@@ -201,31 +240,80 @@ export default {
 .message {
   margin-bottom: 20px;
   display: flex;
-}
-
-.message.user {
-  justify-content: flex-end;
+  gap: 10px;
+  width: 100%;
+  align-items: flex-start;
 }
 
 .message.assistant {
   justify-content: flex-start;
 }
 
-.message-content {
+.message.user {
+  justify-content: flex-end;
+}
+
+.message-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+}
+
+.message.user .message-avatar {
+  background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
+  box-shadow: 0 2px 8px rgba(72, 187, 120, 0.3);
+}
+
+.avatar-icon {
+  font-size: 1.5em;
+  line-height: 1;
+}
+
+.message-wrapper {
+  display: flex;
+  flex-direction: column;
   max-width: 70%;
+  gap: 5px;
+}
+
+.message.assistant .message-wrapper {
+  align-items: flex-start;
+}
+
+.message.user .message-wrapper {
+  align-items: flex-end;
+}
+
+.message-name {
+  font-size: 0.85em;
+  color: rgba(255, 255, 255, 0.7);
+  padding: 0 4px;
+  font-weight: 500;
+}
+
+.message-content {
   padding: 12px 18px;
   border-radius: 18px;
   word-wrap: break-word;
+  line-height: 1.5;
 }
 
 .message.user .message-content {
   background: #667eea;
   color: white;
+  border-bottom-right-radius: 4px;
 }
 
 .message.assistant .message-content {
   background: rgba(255, 255, 255, 0.1);
   color: #ffffff;
+  border-bottom-left-radius: 4px;
 }
 
 .input-area {

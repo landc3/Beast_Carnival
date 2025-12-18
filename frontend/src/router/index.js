@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import WorldView from '../views/WorldView.vue'
+import WorldviewDetail from '../views/WorldviewDetail.vue'
 import Characters from '../views/Characters.vue'
 import CharacterChat from '../views/CharacterChat.vue'
 import Events from '../views/Events.vue'
@@ -12,6 +13,11 @@ const routes = [
     path: '/',
     name: 'WorldView',
     component: WorldView
+  },
+  {
+    path: '/worldview',
+    name: 'WorldviewDetail',
+    component: WorldviewDetail
   },
   {
     path: '/characters',

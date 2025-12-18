@@ -1,5 +1,5 @@
 <template>
-  <div id="app">
+  <div id="app" :class="{ 'allow-scroll': isWorldviewRoute }">
     <router-view />
     <nav class="bottom-nav">
       <div class="nav-item" @click="goToRoute('/')" :class="{ active: $route.path === '/' }">
@@ -23,19 +23,44 @@
 </template>
 
 <script>
-import { useRouter } from 'vue-router'
+import { computed, onUnmounted } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
+import { eventBus } from './utils/eventBus'
 
 export default {
   name: 'App',
   setup() {
     const router = useRouter()
+    const route = useRoute()
     
     const goToRoute = (path) => {
-      router.push(path)
+      // 如果当前在游戏页面，且要跳转到其他页面，触发退出确认
+      if (route.path.startsWith('/werewolf') && path !== '/werewolf' && !path.startsWith('/werewolf')) {
+        eventBus.emit('show-exit-confirm', path)
+      } else {
+        router.push(path)
+      }
     }
     
+    // 监听退出确认事件，确认后执行导航
+    const handleExitConfirmed = (targetPath) => {
+      router.push(targetPath)
+    }
+    eventBus.on('exit-confirmed', handleExitConfirmed)
+    
+    // 判断是否是世界观路由（主页或世界观详情页）
+    const isWorldviewRoute = computed(() => {
+      return route.path === '/' || route.path === '/worldview'
+    })
+    
+    onUnmounted(() => {
+      // 移除事件监听
+      eventBus.off('exit-confirmed', handleExitConfirmed)
+    })
+    
     return {
-      goToRoute
+      goToRoute,
+      isWorldviewRoute
     }
   }
 }
@@ -48,19 +73,55 @@ export default {
   box-sizing: border-box;
 }
 
+html {
+  height: 100%;
+  overflow: hidden;
+}
+
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-  background: #0a0a0a;
-  height: 100vh;
+  background: linear-gradient(135deg, #1a0a2e 0%, #16213e 25%, #0f3460 50%, #533483 75%, #1a0a2e 100%);
+  background-attachment: fixed;
+  height: 100%;
   overflow: hidden;
   color: #ffffff;
+  position: relative;
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-image: 
+    linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+  background-size: 50px 50px;
+  pointer-events: none;
+  z-index: 0;
 }
 
 #app {
-  min-height: 100vh;
+  height: 100vh;
   padding-bottom: 80px;
-  overflow-y: auto;
+  overflow-y: hidden;
   overflow-x: hidden;
+  position: relative;
+  z-index: 1;
+}
+
+/* 只有世界观界面允许滚动 */
+#app.allow-scroll {
+  overflow-y: auto;
+  /* 隐藏滚动条但保持滚动功能 */
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE and Edge */
+}
+
+#app.allow-scroll::-webkit-scrollbar {
+  display: none; /* Chrome, Safari, Opera */
 }
 
 .bottom-nav {
@@ -68,15 +129,15 @@ body {
   bottom: 0;
   left: 0;
   right: 0;
-  background: rgba(20, 20, 20, 0.95);
+  background: linear-gradient(180deg, rgba(26, 10, 46, 0.95) 0%, rgba(19, 33, 62, 0.95) 50%, rgba(83, 52, 131, 0.95) 100%);
   backdrop-filter: blur(10px);
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  border-top: 1px solid rgba(255, 255, 255, 0.15);
   display: flex;
   justify-content: space-around;
   align-items: center;
   padding: 10px 0;
   z-index: 1000;
-  box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 -2px 20px rgba(83, 52, 131, 0.4);
 }
 
 .nav-item {
@@ -92,11 +153,12 @@ body {
 }
 
 .nav-item:hover {
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .nav-item.active {
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.15);
+  box-shadow: 0 2px 10px rgba(83, 52, 131, 0.3);
 }
 
 .nav-icon {

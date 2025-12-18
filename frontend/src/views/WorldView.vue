@@ -49,22 +49,24 @@ export default {
     const router = useRouter()
     const gameStore = useGameStore()
     const stats = ref({
-      worldview: 26,
-      characters: 30,
-      events: 11,
+      worldview: 0,
+      characters: 0,
+      events: 0,
       gameMode: 1
     })
     
     const loadStats = async () => {
       try {
         // 加载统计数据
-        const [charsRes, eventsRes] = await Promise.all([
+        const [worldviewRes, charsRes, eventsRes] = await Promise.all([
+          getWorldView().catch(() => ({ data: { item_count: 0 } })),
           getCharacters().catch(() => ({ data: { characters: [] } })),
           getUserEvents(gameStore.userId).catch(() => ({ data: { events: [] } }))
         ])
         
-        stats.value.characters = charsRes.data.characters?.length || 30
-        stats.value.events = eventsRes.data.events?.length || 11
+        stats.value.worldview = worldviewRes.data.item_count || 0
+        stats.value.characters = charsRes.data.characters?.length || 0
+        stats.value.events = eventsRes.data.events?.length || 0
       } catch (error) {
         console.error('加载统计数据失败:', error)
       }
@@ -73,8 +75,7 @@ export default {
     onMounted(loadStats)
     
     const goToWorldView = () => {
-      // 可以导航到一个详细的世界观页面，或者保持当前页面
-      // 暂时不做操作，或者可以显示世界观详情
+      router.push('/worldview')
     }
     
     const goToCharacters = () => router.push('/characters')
@@ -94,14 +95,11 @@ export default {
 
 <style scoped>
 .home {
-  height: 100vh;
+  min-height: 100vh;
   padding: 40px 20px 100px;
-  background: #0a0a0a;
-  background-image: 
-    radial-gradient(circle at 1px 1px, rgba(255,255,255,0.15) 1px, transparent 0);
-  background-size: 20px 20px;
-  overflow: hidden;
+  background: transparent;
   box-sizing: border-box;
+  position: relative;
 }
 
 .header {

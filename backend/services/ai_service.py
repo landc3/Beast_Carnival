@@ -115,6 +115,64 @@ class AIService:
 4. 当玩家完全解开谜题时，宣布成功
 
 现在开始解谜吧！"""
+    
+    @staticmethod
+    def build_werewolf_ai_prompt(player_role: str, role_name: str, role_desc: str, 
+                                 game_phase: str, day_count: int, 
+                                 recent_messages: List[Dict], 
+                                 alive_players: List[Dict],
+                                 teammates: List[str] = None) -> str:
+        """构建狼人杀AI玩家的prompt"""
+        role_info = f"你的身份是：{role_name}\n{role_desc}"
+        
+        if player_role == "wolf" and teammates:
+            role_info += f"\n你的狼人队友：{', '.join(teammates)}"
+        
+        # 构建最近消息上下文
+        messages_text = ""
+        for msg in recent_messages[-5:]:  # 最近5条消息
+            username = msg.get("username", "未知")
+            content = msg.get("content", "")
+            messages_text += f"{username}：{content}\n"
+        
+        # 构建存活玩家列表
+        alive_names = [p.get("username", "未知") for p in alive_players]
+        alive_text = "、".join(alive_names)
+        
+        phase_desc = {
+            "day": f"第{day_count}天白天讨论阶段",
+            "voting": "投票阶段",
+            "night": "夜晚阶段"
+        }.get(game_phase, game_phase)
+        
+        prompt = f"""你正在参与一场狼人杀游戏。
+
+【你的身份】
+{role_info}
+
+【游戏状态】
+当前阶段：{phase_desc}
+存活玩家：{alive_text}
+
+【最近发言】
+{messages_text if messages_text else "暂无发言"}
+
+【你的任务】
+1. 根据你的身份，以符合角色的方式发言
+2. 如果是狼人，需要伪装成好人，混淆视听，保护队友
+3. 如果是好人，需要分析发言，找出狼人
+4. 发言要简洁有力，符合游戏氛围
+5. 不要暴露自己的真实身份（除非是预言家跳身份）
+6. 发言长度控制在1-2句话，不要太长
+
+请根据当前游戏情况，发表你的看法或回应其他玩家的发言。只返回你的发言内容，不要其他说明。"""
+        
+        return prompt
+
+
+
+
+
 
 
 
