@@ -88,7 +88,7 @@ REDIS_HOST=localhost
 REDIS_PORT=6379
 REDIS_DB=0
 HOST=0.0.0.0
-PORT=8000
+PORT=1998
 ```
 
 ### 4. 启动Redis
@@ -103,12 +103,19 @@ sudo systemctl start redis
 
 ### 5. 启动后端服务
 
+**推荐方式（自动启动前端）：**
+```bash
+cd backend
+python run.py
+```
+
+或者直接运行主应用（需要手动启动前端）：
 ```bash
 cd backend
 python main.py
 ```
 
-后端服务将在 `http://localhost:8000` 启动
+后端服务将在 `http://localhost:1998` 启动
 
 ### 6. 安装前端依赖
 
@@ -119,11 +126,15 @@ npm install
 
 ### 7. 启动前端服务
 
+**注意**：如果使用 `python run.py` 启动后端，前端会自动启动，无需手动执行此步骤。
+
+手动启动前端（仅在直接使用 `python main.py` 时需要）：
 ```bash
+cd frontend
 npm run dev
 ```
 
-前端服务将在 `http://localhost:3000` 启动
+前端服务将在 `http://localhost:4399` 启动
 
 ## 功能说明
 
@@ -170,7 +181,7 @@ npm run dev
 
 ## API文档
 
-启动后端服务后，访问 `http://localhost:8000/docs` 查看Swagger API文档。
+启动后端服务后，访问 `http://localhost:1998/docs` 查看Swagger API文档。
 
 ### 主要接口
 
@@ -185,9 +196,9 @@ npm run dev
 
 ### WebSocket端点
 
-- `ws://localhost:8000/ws/character/{user_id}/{character_id}` - 角色对话
-- `ws://localhost:8000/ws/event/{user_id}/{event_id}` - 解谜事件
-- `ws://localhost:8000/ws/werewolf/{room_id}/{user_id}` - 狼人杀游戏
+- `ws://localhost:1998/ws/character/{user_id}/{character_id}` - 角色对话
+- `ws://localhost:1998/ws/event/{user_id}/{event_id}` - 解谜事件
+- `ws://localhost:1998/ws/werewolf/{room_id}/{user_id}` - 狼人杀游戏
 
 ## 开发说明
 

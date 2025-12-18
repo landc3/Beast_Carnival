@@ -3,6 +3,7 @@ import uuid
 import time
 import sys
 import os
+import logging
 from pathlib import Path
 from typing import List, Dict, Optional
 
@@ -14,6 +15,45 @@ if str(backend_dir) not in sys.path:
 from models.game import GameRoom, Player, GamePhase, PlayerRole
 from services.redis_service import redis_service
 from services.ai_service import AIService
+
+# 配置日志 - 确保即使 uvicorn reload 也能正常工作
+logger = logging.getLogger(__name__)
+# 确保日志级别为 INFO
+logger.setLevel(logging.INFO)
+# 强制添加一个控制台处理器（即使已有 handler 也添加，确保输出）
+handler = logging.StreamHandler(sys.stdout)
+handler.setLevel(logging.INFO)
+# 禁用缓冲，确保日志立即输出
+if hasattr(handler.stream, 'reconfigure'):
+    try:
+        handler.stream.reconfigure(line_buffering=True)
+    except:
+        pass
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s', 
+                              datefmt='%Y-%m-%d %H:%M:%S')
+handler.setFormatter(formatter)
+# 移除旧的 handler（如果有），然后添加新的
+logger.handlers = [h for h in logger.handlers if not isinstance(h, logging.StreamHandler)]
+logger.addHandler(handler)
+logger.propagate = True  # 允许向上传播到根 logger
+
+# 确保根 logger 也有正确的配置
+root_logger = logging.getLogger()
+root_logger.setLevel(logging.INFO)
+# 确保根 logger 有 handler
+if not root_logger.handlers:
+    root_handler = logging.StreamHandler(sys.stdout)
+    root_handler.setLevel(logging.INFO)
+    # 禁用缓冲，确保日志立即输出
+    if hasattr(root_handler.stream, 'reconfigure'):
+        try:
+            root_handler.stream.reconfigure(line_buffering=True)
+        except:
+            pass
+    root_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s', 
+                                      datefmt='%Y-%m-%d %H:%M:%S')
+    root_handler.setFormatter(root_formatter)
+    root_logger.addHandler(root_handler)
 
 class WerewolfService:
     """狼人杀游戏服务"""
@@ -84,24 +124,44 @@ class WerewolfService:
     
     async def join_room(self, room_id: str, user_id: str, username: str) -> bool:
         """加入房间"""
+        # 测试日志输出
+        logger.info(f"【测试日志】join_room 被调用 - 房间 {room_id}, 玩家 {username}")
+        print(f"【测试日志】join_room 被调用 - 房间 {room_id}, 玩家 {username}", flush=True)
+        
         room_data = await redis_service.get_room_data(room_id)
         if not room_data:
+            logger.warning(f"【加入房间失败】房间 {room_id} 不存在")
             return False
         
         room = GameRoom(**room_data)
         
         # 检查是否已加入
         if any(p.user_id == user_id for p in room.players):
+            logger.info(f"【玩家已存在】房间 {room_id} - 玩家 {username} (ID: {user_id}) 已在房间中")
             return True
         
         # 检查房间是否已满（最多12人）
         if len(room.players) >= 12:
+            logger.warning(f"【加入房间失败】房间 {room_id} 已满（当前 {len(room.players)}/12 人）")
             return False
         
         player = Player(user_id=user_id, username=username, is_ai=False)
         room.players.append(player)
         
         await redis_service.set_room_data(room_id, room.dict())
+        
+        # 打印玩家加入日志
+        print(f"\n{'='*60}", flush=True)
+        print(f"【玩家加入游戏】房间 {room_id}", flush=True)
+        print(f"  玩家: {username} (ID: {user_id})", flush=True)
+        print(f"  当前房间人数: {len(room.players)}/12", flush=True)
+        print(f"{'='*60}\n", flush=True)
+        logger.info(f"\n{'='*60}")
+        logger.info(f"【玩家加入游戏】房间 {room_id}")
+        logger.info(f"  玩家: {username} (ID: {user_id})")
+        logger.info(f"  当前房间人数: {len(room.players)}/12")
+        logger.info(f"{'='*60}")
+        
         return True
     
     async def add_ai_player(self, room_id: str) -> bool:
@@ -131,6 +191,10 @@ class WerewolfService:
         room.players.append(ai_player)
         
         await redis_service.set_room_data(room_id, room.dict())
+        
+        # 打印AI玩家加入日志
+        print(f"【AI玩家加入】房间 {room_id} - {ai_name} (ID: {ai_user_id})，当前房间人数: {len(room.players)}/12", flush=True)
+        logger.info(f"【AI玩家加入】房间 {room_id} - {ai_name} (ID: {ai_user_id})，当前房间人数: {len(room.players)}/12")
         
         # 广播房间更新
         await self._ai_announce(room_id, f"{ai_name} 加入了游戏")
@@ -167,15 +231,25 @@ class WerewolfService:
     async def start_game(self, room_id: str) -> bool:
         """开始游戏"""
         try:
+            logger.info(f"\n{'='*60}")
+            logger.info(f"【游戏开始】房间 {room_id}")
+            logger.info(f"{'='*60}")
+            print(f"\n{'='*60}", flush=True)
+            print(f"【游戏开始】房间 {room_id}", flush=True)
+            print(f"{'='*60}", flush=True)
+            
             room_data = await redis_service.get_room_data(room_id)
             if not room_data:
-                print(f"错误: 房间 {room_id} 不存在")
+                logger.error(f"错误: 房间 {room_id} 不存在")
+                print(f"错误: 房间 {room_id} 不存在", flush=True)
                 return False
             
             room = GameRoom(**room_data)
+            logger.info(f"房间 {room_id} - 玩家数量: {len(room.players)}")
+            print(f"房间 {room_id} - 玩家数量: {len(room.players)}", flush=True)
             
             if len(room.players) < 4:  # 至少4人
-                print(f"错误: 房间 {room_id} 玩家数量不足，当前: {len(room.players)}")
+                logger.error(f"错误: 房间 {room_id} 玩家数量不足，当前: {len(room.players)}")
                 return False
             
             # 分配身份（使用12人标准配置，如果人数不足则按比例分配）
@@ -195,10 +269,17 @@ class WerewolfService:
             
             random.shuffle(roles)
             
+            logger.info(f"开始分配身份 - 房间 {room_id}")
+            print(f"\n【身份分配】房间 {room_id}", flush=True)
+            role_distribution = {}
             for i, player in enumerate(room.players):
                 player.role = roles[i]
                 player.alive = True
                 player.voted = False
+                role_name = self._get_role_name(player.role)
+                role_distribution[role_name] = role_distribution.get(role_name, 0) + 1
+                logger.info(f"  - {player.username} (ID: {player.user_id}) -> {role_name}")
+                print(f"  - {player.username} (ID: {player.user_id}) -> {role_name}", flush=True)
                 # 初始化所有字段
                 player.guarded = False
                 player.guard_target = None
@@ -210,6 +291,10 @@ class WerewolfService:
                 player.witch_poison_used = False
                 player.hunter_shot_used = False
             
+            logger.info(f"身份分配完成 - 房间 {room_id}: {role_distribution}")
+            print(f"【身份分配完成】房间 {room_id}: {role_distribution}", flush=True)
+            print(f"{'='*60}\n", flush=True)
+            
             room.phase = GamePhase.IDENTITY_ASSIGN
             room.night_actions = {}
             room.current_night_phase = None
@@ -218,40 +303,49 @@ class WerewolfService:
             await self._set_phase_time(room)
             
             # 发送身份信息（私有消息）
+            import json
             for player in room.players:
                 role_name = self._get_role_name(player.role)
                 role_desc = self._get_role_description(player.role)
                 
-                # 如果是狼人，告知其他狼人
+                # 构建身份消息
                 if player.role == PlayerRole.WOLF:
                     wolves = [p.username for p in room.players if p.role == PlayerRole.WOLF and p.user_id != player.user_id]
                     if wolves:
-                        await redis_service.add_private_message(
-                            room_id, player.user_id,
-                            {
-                                "type": "identity",
-                                "content": f"你的身份是：{role_name}\n\n{role_desc}\n\n你的狼人队友：{', '.join(wolves)}",
-                                "role": role_name
-                            }
-                        )
+                        identity_msg = {
+                            "type": "identity",
+                            "content": f"你的身份是：{role_name}\n\n{role_desc}\n\n你的狼人队友：{', '.join(wolves)}",
+                            "role": role_name
+                        }
                     else:
-                        await redis_service.add_private_message(
-                            room_id, player.user_id,
-                            {
-                                "type": "identity",
-                                "content": f"你的身份是：{role_name}\n\n{role_desc}",
-                                "role": role_name
-                            }
-                        )
-                else:
-                    await redis_service.add_private_message(
-                        room_id, player.user_id,
-                        {
+                        identity_msg = {
                             "type": "identity",
                             "content": f"你的身份是：{role_name}\n\n{role_desc}",
                             "role": role_name
                         }
-                    )
+                else:
+                    identity_msg = {
+                        "type": "identity",
+                        "content": f"你的身份是：{role_name}\n\n{role_desc}",
+                        "role": role_name
+                    }
+                
+                # 保存到 Redis
+                await redis_service.add_private_message(room_id, player.user_id, identity_msg)
+                
+                # 立即通过 WebSocket 发送私有消息（如果回调函数已设置）
+                if self.send_private_message_callback:
+                    try:
+                        await self.send_private_message_callback(
+                            room_id, 
+                            player.user_id, 
+                            json.dumps({
+                                "type": "private_message",
+                                "content": identity_msg
+                            })
+                        )
+                    except Exception as e:
+                        logger.warning(f"发送私有消息失败 (房间 {room_id}, 用户 {player.user_id}): {e}")
             
             # 保存房间状态
             await redis_service.set_room_data(room_id, room.dict())
@@ -268,9 +362,7 @@ class WerewolfService:
             
             return True
         except Exception as e:
-            print(f"开始游戏失败 (房间 {room_id}): {e}")
-            import traceback
-            traceback.print_exc()
+            logger.error(f"开始游戏失败 (房间 {room_id}): {e}", exc_info=True)
             return False
     
     async def get_room(self, room_id: str, check_timeout: bool = True) -> Optional[GameRoom]:
@@ -338,9 +430,9 @@ class WerewolfService:
                 
                 # 安全检查：确保所有存活玩家都可以投票
                 alive_players = [p for p in room.players if p.alive]
-                print(f"【投票阶段开始】房间 {room.room_id} - 存活玩家数: {len(alive_players)}")
+                logger.info(f"【投票阶段开始】房间 {room.room_id} - 存活玩家数: {len(alive_players)}")
                 for p in alive_players:
-                    print(f"  - {p.username} (ID: {p.user_id}, 角色: {self._get_role_name(p.role) if p.role else '未知'}, alive: {p.alive})")
+                    logger.info(f"  - {p.username} (ID: {p.user_id}, 角色: {self._get_role_name(p.role) if p.role else '未知'}, alive: {p.alive})")
                 
                 # 再次确认：在投票阶段开始时，不应该有任何玩家的alive状态被修改
                 # 如果从Redis获取的数据中包含了错误的死亡状态，我们需要修复它
@@ -401,20 +493,28 @@ class WerewolfService:
     
     async def player_action(self, room_id: str, user_id: str, action_type: str, action_data: Optional[Dict] = None) -> Dict:
         """玩家行动"""
+        logger.info(f"【玩家行动接收】房间 {room_id} - 玩家ID: {user_id}, 行动类型: {action_type}, 行动数据: {action_data}")
+        
         room = await self.get_room(room_id)
         if not room:
+            logger.warning(f"【玩家行动】房间 {room_id} 不存在")
             return {"error": "房间不存在"}
         
         player = next((p for p in room.players if p.user_id == user_id), None)
         if not player:
+            logger.warning(f"【玩家行动】房间 {room_id} - 玩家ID {user_id} 不存在")
             return {"error": "玩家不存在"}
+        
+        logger.info(f"【玩家行动】房间 {room_id} - 玩家 {player.username} (ID: {user_id}, 角色: {self._get_role_name(player.role) if player.role else '未知'}, 存活: {player.alive}), 当前阶段: {room.phase}")
         
         # 遗言可以在任何阶段提交（只要玩家已死亡）
         if action_type == "last_words":
+            logger.info(f"【遗言】房间 {room_id} - 玩家 {player.username} 提交遗言")
             return await self._handle_last_words_action(room, player, action_data)
         
         # 其他行动需要玩家存活
         if not player.alive:
+            logger.warning(f"【玩家行动】房间 {room_id} - 玩家 {player.username} 已死亡，无法执行行动")
             return {"error": "玩家已死亡"}
         
         if action_data is None:
@@ -426,16 +526,24 @@ class WerewolfService:
         elif room.phase == GamePhase.DAY:
             return await self._handle_day_action(room, player, action_type, action_data)
         elif room.phase == GamePhase.VOTING:
+            logger.info(f"【投票行动】房间 {room_id} - 玩家 {player.username} 投票给: {action_data.get('target')}")
             return await self._handle_voting(room, player, action_data.get("target"))
         elif room.phase == GamePhase.ELIMINATION:
             # 处理淘汰阶段的技能（如猎人开枪）
+            logger.info(f"【淘汰阶段行动】房间 {room_id} - 玩家 {player.username} 执行行动: {action_type}")
             return await self._handle_elimination_action(room, player, action_type, action_data)
         
+        logger.warning(f"【玩家行动】房间 {room_id} - 当前阶段 {room.phase} 不允许操作 {action_type}")
         return {"error": "当前阶段不允许此操作"}
     
     async def _handle_night_action(self, room: GameRoom, player: Player, action_type: str, action_data: Dict) -> Dict:
         """处理夜晚行动"""
         target = action_data.get("target")
+        witch_action = action_data.get("witch_action")
+        
+        # 强制刷新输出，确保日志立即显示
+        print(f"【夜晚行动接收】房间 {room.room_id} - 玩家 {player.username} (ID: {player.user_id}, 角色: {self._get_role_name(player.role) if player.role else '未知'}) 执行行动: {action_type}, 目标: {target}, 女巫行动: {witch_action}", flush=True)
+        logger.info(f"【夜晚行动接收】房间 {room.room_id} - 玩家 {player.username} (ID: {player.user_id}, 角色: {self._get_role_name(player.role) if player.role else '未知'}) 执行行动: {action_type}, 目标: {target}, 女巫行动: {witch_action}")
         
         result = None
         # 支持两种格式：guard/guard_action, wolf/wolf_action等
@@ -453,7 +561,13 @@ class WerewolfService:
             }
             result = await self._handle_witch_action(room, player, witch_action_data)
         else:
+            logger.warning(f"【夜晚行动】房间 {room.room_id} - 无效的夜晚行动类型: {action_type}")
             return {"error": "无效的夜晚行动类型"}
+        
+        if result.get("success"):
+            logger.info(f"【夜晚行动成功】房间 {room.room_id} - 玩家 {player.username} 行动成功: {result.get('message', '')}")
+        elif result.get("error"):
+            logger.warning(f"【夜晚行动失败】房间 {room.room_id} - 玩家 {player.username} 行动失败: {result.get('error', '')}")
         
         # 检查是否所有夜晚行动都完成了
         if result.get("success"):
@@ -545,20 +659,26 @@ class WerewolfService:
         """处理投票"""
         # 检查玩家是否存活
         if not player.alive:
+            logger.warning(f"【投票】房间 {room.room_id} - 玩家 {player.username} 已死亡，无法投票")
             return {"error": "玩家已死亡，无法投票"}
         
         if not target:
+            logger.warning(f"【投票】房间 {room.room_id} - 玩家 {player.username} 未选择投票目标")
             return {"error": "请选择投票目标"}
         
         # 检查目标玩家是否存在且存活
         target_player = next((p for p in room.players if p.user_id == target), None)
         if not target_player:
+            logger.warning(f"【投票】房间 {room.room_id} - 目标玩家不存在: {target}")
             return {"error": "目标玩家不存在"}
         if not target_player.alive:
+            logger.warning(f"【投票】房间 {room.room_id} - 目标玩家 {target_player.username} 已死亡，无法投票")
             return {"error": "目标玩家已死亡，无法投票"}
         
         player.voted = True
         player.vote_target = target
+        
+        logger.info(f"【投票】房间 {room.room_id} - 玩家 {player.username} (ID: {player.user_id}, 角色: {self._get_role_name(player.role) if player.role else '未知'}) 投票给: {target_player.username} (ID: {target})")
         
         await redis_service.set_room_data(room.room_id, room.dict())
         
@@ -597,6 +717,18 @@ class WerewolfService:
             phase_popup: 阶段弹窗类型 ("night_start", "night_end", "day_start", "day_end")
             broadcast_callback: 可选的广播回调函数，用于通过WebSocket广播消息
         """
+        # 检查是否最近发送过相同的消息（防止重复发送）
+        recent_messages = await redis_service.get_room_messages(room_id)
+        if recent_messages:
+            # 检查最近3条消息中是否有相同的内容
+            for recent_msg in recent_messages[-3:]:
+                if (recent_msg.get("type") == "system" and 
+                    recent_msg.get("username") == "AI主持人" and
+                    recent_msg.get("content") == message and
+                    recent_msg.get("phase_popup") == phase_popup):
+                    logger.debug(f"跳过重复消息: {message} (房间 {room_id})")
+                    return
+        
         msg = {
             "type": "system",
             "content": message,
@@ -605,6 +737,8 @@ class WerewolfService:
         }
         if phase_popup:
             msg["phase_popup"] = phase_popup
+        
+        logger.info(f"[AI主持人] 房间 {room_id}: {message}")
         await redis_service.add_room_message(room_id, msg)
         
         # 如果有广播回调（优先使用传入的，否则使用类级别的）
@@ -887,7 +1021,7 @@ class WerewolfService:
                     await broadcast_callback(room.room_id, ai_message)
                 
             except Exception as e:
-                print(f"AI玩家 {current_ai_player.username} 生成回复失败: {e}")
+                logger.warning(f"AI玩家 {current_ai_player.username} 生成回复失败: {e}")
                 # 使用默认回复
                 default_response = self._generate_default_ai_response(current_ai_player, current_room)
                 ai_message = {
@@ -1066,7 +1200,7 @@ class WerewolfService:
                         # 如果是狼人，检查是否是队友，如果是队友则重新选择
                         if ai_player.role == PlayerRole.WOLF and player.role == PlayerRole.WOLF:
                             # AI狼人投票给队友，使用策略投票重新选择
-                            print(f"【AI投票】{ai_player.username} (狼人) 尝试投票给队友 {player.username}，重新选择目标")
+                            logger.info(f"【AI投票】{ai_player.username} (狼人) 尝试投票给队友 {player.username}，重新选择目标")
                             return self._ai_strategic_vote(room, ai_player, alive_players)
                         return player.user_id
             
@@ -1074,7 +1208,7 @@ class WerewolfService:
             return self._ai_strategic_vote(room, ai_player, alive_players)
             
         except Exception as e:
-            print(f"AI玩家 {ai_player.username} 选择投票目标失败: {e}")
+            logger.warning(f"AI玩家 {ai_player.username} 选择投票目标失败: {e}")
             # 使用策略投票
             return self._ai_strategic_vote(room, ai_player, alive_players)
     
@@ -1100,10 +1234,22 @@ class WerewolfService:
         """开始夜晚阶段"""
         import asyncio
         
+        # 强制刷新输出
+        print(f"\n{'='*60}", flush=True)
+        print(f"【夜晚阶段开始】房间 {room_id}", flush=True)
+        print(f"{'='*60}", flush=True)
+        logger.info(f"\n{'='*60}")
+        logger.info(f"【夜晚阶段开始】房间 {room_id}")
+        logger.info(f"{'='*60}")
+        
         room = await self.get_room(room_id, check_timeout=False)
         if not room:
+            print(f"房间 {room_id} 不存在，无法开始夜晚阶段", flush=True)
+            logger.error(f"房间 {room_id} 不存在，无法开始夜晚阶段")
             return
         
+        print(f"房间 {room_id} - 第 {room.night_count + 1} 夜开始", flush=True)
+        logger.info(f"房间 {room_id} - 第 {room.night_count + 1} 夜开始")
         room.phase = GamePhase.NIGHT
         room.night_count += 1
         room.night_actions = {}
@@ -1157,6 +1303,7 @@ class WerewolfService:
             current_room = GameRoom(**room_data)
             guard = next((p for p in current_room.players if p.role == PlayerRole.GUARD and p.alive), None)
             if not guard or "guard" in current_room.night_actions:
+                logger.info(f"【守卫阶段完成】房间 {room.room_id} - AI主持人: 守卫已完成操作。")
                 await self._ai_announce(room.room_id, "守卫已完成操作。")
                 await asyncio.sleep(1)  # 等待1秒，让玩家看到提示
         
@@ -1175,6 +1322,7 @@ class WerewolfService:
             wolves = [p for p in current_room.players if p.role == PlayerRole.WOLF and p.alive]
             if not wolves or ("wolf" in current_room.night_actions and 
                              len(current_room.night_actions["wolf"].get("votes", {})) >= len(wolves)):
+                logger.info(f"【狼人阶段完成】房间 {room.room_id} - AI主持人: 狼人已完成操作。")
                 await self._ai_announce(room.room_id, "狼人已完成操作。")
                 await asyncio.sleep(1)  # 等待1秒，让玩家看到提示
         
@@ -1192,6 +1340,7 @@ class WerewolfService:
             current_room = GameRoom(**room_data)
             seer = next((p for p in current_room.players if p.role == PlayerRole.SEER and p.alive), None)
             if not seer or "seer" in current_room.night_actions:
+                logger.info(f"【预言家阶段完成】房间 {room.room_id} - AI主持人: 预言家已完成操作。")
                 await self._ai_announce(room.room_id, "预言家已完成操作。")
                 await asyncio.sleep(1)  # 等待1秒，让玩家看到提示
         
@@ -1209,12 +1358,14 @@ class WerewolfService:
             current_room = GameRoom(**room_data)
             witch = next((p for p in current_room.players if p.role == PlayerRole.WITCH and p.alive), None)
             if not witch:
+                logger.info(f"【女巫阶段完成】房间 {room.room_id} - AI主持人: 女巫已完成操作。")
                 await self._ai_announce(room.room_id, "女巫已完成操作。")
             elif "witch" in current_room.night_actions:
                 witch_action = current_room.night_actions["witch"]
                 if (witch_action.get("antidote_used") or 
                     witch_action.get("poison_used") or 
                     witch_action.get("action") == "none"):
+                    logger.info(f"【女巫阶段完成】房间 {room.room_id} - AI主持人: 女巫已完成操作。")
                     await self._ai_announce(room.room_id, "女巫已完成操作。")
             await asyncio.sleep(1)  # 等待1秒，让玩家看到提示
         
@@ -1232,8 +1383,11 @@ class WerewolfService:
         """处理守卫阶段"""
         guard = next((p for p in room.players if p.role == PlayerRole.GUARD and p.alive), None)
         if not guard:
+            logger.info(f"【守卫阶段】房间 {room.room_id} - 守卫已死亡或不存在，跳过")
             return
         
+        print(f"【守卫阶段开始】房间 {room.room_id} - 守卫 {guard.username} (ID: {guard.user_id})", flush=True)
+        logger.info(f"【守卫阶段开始】房间 {room.room_id} - 守卫 {guard.username} (ID: {guard.user_id})")
         room.current_night_phase = "guard"
         await redis_service.set_room_data(room.room_id, room.dict())
         
@@ -1246,6 +1400,7 @@ class WerewolfService:
             }), f"werewolf_{room.room_id}")
         
         # AI主持人公开提示
+        logger.info(f"【守卫阶段】房间 {room.room_id} - AI主持人: 守卫请睁眼，选择你要守护的玩家。")
         await self._ai_announce(room.room_id, "守卫请睁眼，选择你要守护的玩家。")
         
         # 发送私密消息给守卫
@@ -1293,8 +1448,12 @@ class WerewolfService:
         """处理狼人阶段"""
         wolves = [p for p in room.players if p.role == PlayerRole.WOLF and p.alive]
         if not wolves:
+            logger.info(f"【狼人阶段】房间 {room.room_id} - 狼人已全部死亡，跳过")
             return
         
+        wolf_names = [w.username for w in wolves]
+        print(f"【狼人阶段开始】房间 {room.room_id} - 存活狼人: {', '.join(wolf_names)} (共 {len(wolves)} 人)", flush=True)
+        logger.info(f"【狼人阶段开始】房间 {room.room_id} - 存活狼人: {', '.join(wolf_names)} (共 {len(wolves)} 人)")
         room.current_night_phase = "wolf"
         await redis_service.set_room_data(room.room_id, room.dict())
         
@@ -1307,6 +1466,7 @@ class WerewolfService:
             }), f"werewolf_{room.room_id}")
         
         # AI主持人公开提示
+        logger.info(f"【狼人阶段】房间 {room.room_id} - AI主持人: 守卫请闭眼。狼人请睁眼，共同选择要击杀的玩家。")
         await self._ai_announce(room.room_id, "守卫请闭眼。狼人请睁眼，共同选择要击杀的玩家。")
         
         # 获取所有存活玩家（排除狼人）
@@ -1346,8 +1506,11 @@ class WerewolfService:
         """处理预言家阶段"""
         seer = next((p for p in room.players if p.role == PlayerRole.SEER and p.alive), None)
         if not seer:
+            logger.info(f"【预言家阶段】房间 {room.room_id} - 预言家已死亡或不存在，跳过")
             return
         
+        print(f"【预言家阶段开始】房间 {room.room_id} - 预言家 {seer.username} (ID: {seer.user_id})", flush=True)
+        logger.info(f"【预言家阶段开始】房间 {room.room_id} - 预言家 {seer.username} (ID: {seer.user_id})")
         room.current_night_phase = "seer"
         await redis_service.set_room_data(room.room_id, room.dict())
         
@@ -1360,6 +1523,7 @@ class WerewolfService:
             }), f"werewolf_{room.room_id}")
         
         # AI主持人公开提示
+        logger.info(f"【预言家阶段】房间 {room.room_id} - AI主持人: 狼人请闭眼。预言家请睁眼，选择你要查验的玩家。")
         await self._ai_announce(room.room_id, "狼人请闭眼。预言家请睁眼，选择你要查验的玩家。")
         
         # 获取所有存活玩家（排除自己）
@@ -1392,8 +1556,11 @@ class WerewolfService:
         """处理女巫阶段"""
         witch = next((p for p in room.players if p.role == PlayerRole.WITCH and p.alive), None)
         if not witch:
+            logger.info(f"【女巫阶段】房间 {room.room_id} - 女巫已死亡或不存在，跳过")
             return
         
+        print(f"【女巫阶段开始】房间 {room.room_id} - 女巫 {witch.username} (ID: {witch.user_id})", flush=True)
+        logger.info(f"【女巫阶段开始】房间 {room.room_id} - 女巫 {witch.username} (ID: {witch.user_id})")
         room.current_night_phase = "witch"
         await redis_service.set_room_data(room.room_id, room.dict())
         
@@ -1406,6 +1573,7 @@ class WerewolfService:
             }), f"werewolf_{room.room_id}")
         
         # AI主持人公开提示
+        logger.info(f"【女巫阶段】房间 {room.room_id} - AI主持人: 预言家请闭眼。女巫请睁眼。")
         await self._ai_announce(room.room_id, "预言家请闭眼。女巫请睁眼。")
         
         # 获取狼人击杀目标
@@ -1501,8 +1669,9 @@ class WerewolfService:
         
         await redis_service.set_room_data(room.room_id, room.dict())
         
-        # 打印守卫行动日志
-        print(f"【守卫行动】房间 {room.room_id} - 守卫 {player.username} 选择守护: {target_player.username} (ID: {target})")
+        # 打印守卫行动日志（强制刷新输出）
+        print(f"【守卫行动】房间 {room.room_id} - 守卫 {player.username} 选择守护: {target_player.username} (ID: {target})", flush=True)
+        logger.info(f"【守卫行动】房间 {room.room_id} - 守卫 {player.username} 选择守护: {target_player.username} (ID: {target})")
         
         # 发送确认消息
         await redis_service.add_private_message(
@@ -1541,13 +1710,15 @@ class WerewolfService:
         
         room.night_actions["wolf"]["votes"][player.user_id] = target
         
-        # 打印狼人投票日志
-        print(f"【狼人投票】房间 {room.room_id} - 狼人 {player.username} (ID: {player.user_id}) 投票击杀: {target_player.username} (ID: {target})")
+        # 打印狼人投票日志（强制刷新输出）
+        print(f"【狼人投票】房间 {room.room_id} - 狼人 {player.username} (ID: {player.user_id}) 投票击杀: {target_player.username} (ID: {target})", flush=True)
+        logger.info(f"【狼人投票】房间 {room.room_id} - 狼人 {player.username} (ID: {player.user_id}) 投票击杀: {target_player.username} (ID: {target})")
         
         # 检查是否所有狼人都投票了
         wolves = [p for p in room.players if p.role == PlayerRole.WOLF and p.alive]
         votes = room.night_actions["wolf"]["votes"]
-        print(f"【狼人投票进度】房间 {room.room_id} - 已投票: {len(votes)}/{len(wolves)}")
+        print(f"【狼人投票进度】房间 {room.room_id} - 已投票: {len(votes)}/{len(wolves)}", flush=True)
+        logger.info(f"【狼人投票进度】房间 {room.room_id} - 已投票: {len(votes)}/{len(wolves)}")
         
         # 如果人类狼人投票了，触发AI狼人跟随投票
         if not player.is_ai:
@@ -1580,11 +1751,13 @@ class WerewolfService:
             room.night_actions["wolf"]["target"] = final_target
             room.eliminated_tonight = final_target
             
-            # 打印狼人投票完成日志
+            # 打印狼人投票完成日志（强制刷新输出）
             final_target_player = next((p for p in room.players if p.user_id == final_target), None)
             final_target_name = final_target_player.username if final_target_player else final_target
-            print(f"【狼人投票完成】房间 {room.room_id} - 所有狼人已投票，最终击杀目标: {final_target_name} (ID: {final_target})")
-            print(f"  投票详情: {vote_counts}")
+            print(f"【狼人投票完成】房间 {room.room_id} - 所有狼人已投票，最终击杀目标: {final_target_name} (ID: {final_target})", flush=True)
+            print(f"  投票详情: {vote_counts}", flush=True)
+            logger.info(f"【狼人投票完成】房间 {room.room_id} - 所有狼人已投票，最终击杀目标: {final_target_name} (ID: {final_target})")
+            logger.info(f"  投票详情: {vote_counts}")
         
         await redis_service.set_room_data(room.room_id, room.dict())
         
@@ -1669,22 +1842,19 @@ class WerewolfService:
     
     async def _handle_seer_action(self, room: GameRoom, player: Player, target: Optional[str]) -> Dict:
         """处理预言家行动"""
-        import logging
-        logger = logging.getLogger(__name__)
-        
-        logger.info(f"[预言家行动] 玩家 {player.username} (ID: {player.user_id}) 开始查验，目标: {target}")
+        logger.info(f"【预言家行动】房间 {room.room_id} - 玩家 {player.username} (ID: {player.user_id}) 开始查验，目标: {target}")
         
         if player.role != PlayerRole.SEER:
-            logger.warning(f"[预言家行动] 玩家 {player.username} 不是预言家")
+            logger.warning(f"【预言家行动】房间 {room.room_id} - 玩家 {player.username} 不是预言家")
             return {"error": "你不是预言家"}
         
         if not target:
-            logger.warning(f"[预言家行动] 玩家 {player.username} 未选择查验目标")
+            logger.warning(f"【预言家行动】房间 {room.room_id} - 玩家 {player.username} 未选择查验目标")
             return {"error": "请选择查验目标"}
         
         target_player = next((p for p in room.players if p.user_id == target and p.alive), None)
         if not target_player:
-            logger.warning(f"[预言家行动] 目标玩家不存在或已死亡: {target}")
+            logger.warning(f"【预言家行动】房间 {room.room_id} - 目标玩家不存在或已死亡: {target}")
             return {"error": "目标玩家不存在或已死亡"}
         
         # 记录查验结果
@@ -1695,7 +1865,9 @@ class WerewolfService:
         result = "狼人" if target_player.role == PlayerRole.WOLF else "好人"
         room.night_actions["seer"]["result"] = result
         
-        logger.info(f"[预言家行动] 玩家 {player.username} 查验 {target_player.username}，结果: {result}")
+        # 强制刷新输出
+        print(f"【预言家行动】房间 {room.room_id} - 预言家 {player.username} 查验 {target_player.username}，结果: {result}", flush=True)
+        logger.info(f"【预言家行动】房间 {room.room_id} - 预言家 {player.username} 查验 {target_player.username}，结果: {result}")
         
         await redis_service.set_room_data(room.room_id, room.dict())
         
@@ -1744,8 +1916,24 @@ class WerewolfService:
         
         # 获取狼人击杀目标
         wolf_target = None
-        if "wolf" in room.night_actions and room.night_actions["wolf"].get("target"):
-            wolf_target = room.night_actions["wolf"]["target"]
+        if "wolf" in room.night_actions:
+            # 首先尝试从 target 字段获取
+            if room.night_actions["wolf"].get("target"):
+                wolf_target = room.night_actions["wolf"]["target"]
+            # 如果 target 没有设置，但从投票记录中计算（防止 target 未正确设置的情况）
+            elif "votes" in room.night_actions["wolf"] and room.night_actions["wolf"]["votes"]:
+                votes = room.night_actions["wolf"]["votes"]
+                # 统计投票
+                vote_counts = {}
+                for vote_target in votes.values():
+                    vote_counts[vote_target] = vote_counts.get(vote_target, 0) + 1
+                # 选择得票最多的目标
+                if vote_counts:
+                    wolf_target = max(vote_counts.items(), key=lambda x: x[1])[0]
+                    # 同时更新 target 字段，确保数据一致性
+                    room.night_actions["wolf"]["target"] = wolf_target
+                    room.eliminated_tonight = wolf_target
+                    logger.info(f"【女巫行动】从投票记录中计算狼人击杀目标: {wolf_target}")
         
         if action_type == "antidote":
             # 使用解药
@@ -1768,8 +1956,9 @@ class WerewolfService:
             saved_player = next((p for p in room.players if p.user_id == wolf_target), None)
             saved_name = saved_player.username if saved_player else "未知"
             
-            # 打印女巫救人日志
-            print(f"【女巫行动】房间 {room.room_id} - 女巫 {player.username} 使用解药救了: {saved_name} (ID: {wolf_target})")
+            # 打印女巫救人日志（强制刷新输出）
+            print(f"【女巫行动】房间 {room.room_id} - 女巫 {player.username} 使用解药救了: {saved_name} (ID: {wolf_target})", flush=True)
+            logger.info(f"【女巫行动】房间 {room.room_id} - 女巫 {player.username} 使用解药救了: {saved_name} (ID: {wolf_target})")
             
             await redis_service.set_room_data(room.room_id, room.dict())
             
@@ -1801,8 +1990,9 @@ class WerewolfService:
             player.witch_poison_used = True
             target_player.poisoned_by_witch = True
             
-            # 打印女巫毒人日志
-            print(f"【女巫行动】房间 {room.room_id} - 女巫 {player.username} 使用毒药毒杀了: {target_player.username} (ID: {target})")
+            # 打印女巫毒人日志（强制刷新输出）
+            print(f"【女巫行动】房间 {room.room_id} - 女巫 {player.username} 使用毒药毒杀了: {target_player.username} (ID: {target})", flush=True)
+            logger.info(f"【女巫行动】房间 {room.room_id} - 女巫 {player.username} 使用毒药毒杀了: {target_player.username} (ID: {target})")
             
             await redis_service.set_room_data(room.room_id, room.dict())
             
@@ -1821,8 +2011,9 @@ class WerewolfService:
             # 不使用任何药水
             room.night_actions["witch"]["action"] = "none"
             
-            # 打印女巫不使用药水日志
-            print(f"【女巫行动】房间 {room.room_id} - 女巫 {player.username} 选择不使用任何药水")
+            # 打印女巫不使用药水日志（强制刷新输出）
+            print(f"【女巫行动】房间 {room.room_id} - 女巫 {player.username} 选择不使用任何药水", flush=True)
+            logger.info(f"【女巫行动】房间 {room.room_id} - 女巫 {player.username} 选择不使用任何药水")
             
             await redis_service.set_room_data(room.room_id, room.dict())
             
@@ -1846,15 +2037,19 @@ class WerewolfService:
         
         # 防止重复调用
         if room.room_id in self.processing_night_result:
-            print(f"【夜晚结算】房间 {room.room_id} 正在处理中，跳过重复调用")
+            logger.warning(f"【夜晚结算】房间 {room.room_id} 正在处理中，跳过重复调用")
             return
         
         self.processing_night_result.add(room.room_id)
         
         try:
-            print(f"\n{'='*60}")
-            print(f"【夜晚结算】房间 {room.room_id} - 第 {room.night_count} 夜")
-            print(f"{'='*60}")
+            # 强制刷新输出
+            print(f"\n{'='*60}", flush=True)
+            print(f"【夜晚结算】房间 {room.room_id} - 第 {room.night_count} 夜", flush=True)
+            print(f"{'='*60}", flush=True)
+            logger.info(f"\n{'='*60}")
+            logger.info(f"【夜晚结算】房间 {room.room_id} - 第 {room.night_count} 夜")
+            logger.info(f"{'='*60}")
             
             # AI主持人提示夜晚结束
             await self._ai_announce(room.room_id, "女巫请闭眼。所有玩家请闭眼。", phase_popup="night_end")
@@ -1883,13 +2078,14 @@ class WerewolfService:
                         # 同时更新 target 字段，确保数据一致性
                         room.night_actions["wolf"]["target"] = wolf_target
                         room.eliminated_tonight = wolf_target
-                        print(f"【狼人击杀】从投票记录中计算目标: {wolf_target}")
+                        logger.info(f"【狼人击杀】从投票记录中计算目标: {wolf_target}")
             
             if wolf_target:
                 wolf_target_player = next((p for p in room.players if p.user_id == wolf_target), None)
                 if wolf_target_player:
                     role_name = self._get_role_name(wolf_target_player.role) if wolf_target_player.role else "未知"
-                    print(f"【狼人击杀】目标: {wolf_target_player.username} ({role_name}) (ID: {wolf_target})")
+                    print(f"【狼人击杀】目标: {wolf_target_player.username} ({role_name}) (ID: {wolf_target})", flush=True)
+                    logger.info(f"【狼人击杀】目标: {wolf_target_player.username} ({role_name}) (ID: {wolf_target})")
                     # 打印狼人投票详情
                     if "wolf" in room.night_actions and "votes" in room.night_actions["wolf"]:
                         votes = room.night_actions["wolf"]["votes"]
@@ -1901,11 +2097,14 @@ class WerewolfService:
                             else:
                                 vote_name = vote_target
                             vote_counts[vote_name] = vote_counts.get(vote_name, 0) + 1
-                        print(f"【狼人投票详情】{vote_counts}")
+                        print(f"【狼人投票详情】{vote_counts}", flush=True)
+                        logger.info(f"【狼人投票详情】{vote_counts}")
                 else:
-                    print(f"【狼人击杀】目标ID存在但玩家不存在: {wolf_target}")
+                    print(f"【狼人击杀】目标ID存在但玩家不存在: {wolf_target}", flush=True)
+                    logger.warning(f"【狼人击杀】目标ID存在但玩家不存在: {wolf_target}")
             else:
-                print(f"【狼人击杀】今晚无人被击杀")
+                print(f"【狼人击杀】今晚无人被击杀", flush=True)
+                logger.info(f"【狼人击杀】今晚无人被击杀")
             
             # 获取守卫守护目标
             guard_target = None
@@ -1917,32 +2116,47 @@ class WerewolfService:
                 if guard_target_player:
                     target_role = self._get_role_name(guard_target_player.role) if guard_target_player.role else "未知"
                     guard_name = f"{guard_player.username} ({self._get_role_name(guard_player.role) if guard_player else '未知'})" if guard_player else "未知"
-                    print(f"【守卫保护】守卫 {guard_name} 保护了: {guard_target_player.username} ({target_role}) (ID: {guard_target})")
+                    print(f"【守卫保护】守卫 {guard_name} 保护了: {guard_target_player.username} ({target_role}) (ID: {guard_target})", flush=True)
+                    logger.info(f"【守卫保护】守卫 {guard_name} 保护了: {guard_target_player.username} ({target_role}) (ID: {guard_target})")
                 else:
-                    print(f"【守卫保护】目标ID存在但玩家不存在: {guard_target}")
+                    print(f"【守卫保护】目标ID存在但玩家不存在: {guard_target}", flush=True)
+                    logger.warning(f"【守卫保护】目标ID存在但玩家不存在: {guard_target}")
             else:
                 guard_player = next((p for p in room.players if p.role == PlayerRole.GUARD and p.alive), None)
                 if guard_player:
-                    print(f"【守卫保护】守卫 {guard_player.username} 今晚未使用技能")
+                    print(f"【守卫保护】守卫 {guard_player.username} 今晚未使用技能", flush=True)
+                    logger.info(f"【守卫保护】守卫 {guard_player.username} 今晚未使用技能")
                 else:
-                    print(f"【守卫保护】守卫已死亡或不存在")
+                    print(f"【守卫保护】守卫已死亡或不存在", flush=True)
+                    logger.info(f"【守卫保护】守卫已死亡或不存在")
             
             # 获取女巫行动
             witch_saved = None
             witch_poisoned = None
             witch_player = next((p for p in room.players if p.role == PlayerRole.WITCH and p.alive), None)
             if "witch" in room.night_actions:
+                # 优先从 saved_target 获取，如果没有则从 saved_tonight 获取
                 if room.night_actions["witch"].get("saved_target"):
                     witch_saved = room.night_actions["witch"]["saved_target"]
+                elif room.saved_tonight:
+                    witch_saved = room.saved_tonight
+                    # 同时更新 night_actions 中的 saved_target，确保数据一致性
+                    room.night_actions["witch"]["saved_target"] = witch_saved
+                    logger.info(f"【女巫救人】从 saved_tonight 获取被救目标: {witch_saved}")
+                
+                if witch_saved:
                     saved_player = next((p for p in room.players if p.user_id == witch_saved), None)
                     if saved_player:
                         saved_role = self._get_role_name(saved_player.role) if saved_player.role else "未知"
                         witch_name = f"{witch_player.username} ({self._get_role_name(witch_player.role) if witch_player else '未知'})" if witch_player else "未知"
-                        print(f"【女巫救人】女巫 {witch_name} 使用解药救了: {saved_player.username} ({saved_role}) (ID: {witch_saved})")
+                        print(f"【女巫救人】女巫 {witch_name} 使用解药救了: {saved_player.username} ({saved_role}) (ID: {witch_saved})", flush=True)
+                        logger.info(f"【女巫救人】女巫 {witch_name} 使用解药救了: {saved_player.username} ({saved_role}) (ID: {witch_saved})")
                     else:
-                        print(f"【女巫救人】目标ID存在但玩家不存在: {witch_saved}")
+                        print(f"【女巫救人】目标ID存在但玩家不存在: {witch_saved}", flush=True)
+                        logger.warning(f"【女巫救人】目标ID存在但玩家不存在: {witch_saved}")
                 else:
-                    print(f"【女巫救人】女巫 {witch_player.username if witch_player else '未知'} 未使用解药")
+                    print(f"【女巫救人】女巫 {witch_player.username if witch_player else '未知'} 未使用解药", flush=True)
+                    logger.info(f"【女巫救人】女巫 {witch_player.username if witch_player else '未知'} 未使用解药")
                 
                 if room.night_actions["witch"].get("poison_target"):
                     witch_poisoned = room.night_actions["witch"]["poison_target"]
@@ -1950,16 +2164,19 @@ class WerewolfService:
                     if poisoned_target_player:
                         poisoned_role = self._get_role_name(poisoned_target_player.role) if poisoned_target_player.role else "未知"
                         witch_name = f"{witch_player.username} ({self._get_role_name(witch_player.role) if witch_player else '未知'})" if witch_player else "未知"
-                        print(f"【女巫毒人】女巫 {witch_name} 使用毒药毒杀了: {poisoned_target_player.username} ({poisoned_role}) (ID: {witch_poisoned})")
+                        print(f"【女巫毒人】女巫 {witch_name} 使用毒药毒杀了: {poisoned_target_player.username} ({poisoned_role}) (ID: {witch_poisoned})", flush=True)
+                        logger.info(f"【女巫毒人】女巫 {witch_name} 使用毒药毒杀了: {poisoned_target_player.username} ({poisoned_role}) (ID: {witch_poisoned})")
                     else:
-                        print(f"【女巫毒人】目标ID存在但玩家不存在: {witch_poisoned}")
+                        print(f"【女巫毒人】目标ID存在但玩家不存在: {witch_poisoned}", flush=True)
+                        logger.warning(f"【女巫毒人】目标ID存在但玩家不存在: {witch_poisoned}")
                 else:
-                    print(f"【女巫毒人】女巫 {witch_player.username if witch_player else '未知'} 未使用毒药")
+                    print(f"【女巫毒人】女巫 {witch_player.username if witch_player else '未知'} 未使用毒药", flush=True)
+                    logger.info(f"【女巫毒人】女巫 {witch_player.username if witch_player else '未知'} 未使用毒药")
             else:
                 if witch_player:
-                    print(f"【女巫行动】女巫 {witch_player.username} 今晚未使用任何药水")
+                    logger.info(f"【女巫行动】女巫 {witch_player.username} 今晚未使用任何药水")
                 else:
-                    print(f"【女巫行动】女巫已死亡或不存在")
+                    logger.info(f"【女巫行动】女巫已死亡或不存在")
             
             # 处理被刀者
             if wolf_target:
@@ -1967,15 +2184,18 @@ class WerewolfService:
                 if wolf_target_player and wolf_target_player.alive:
                     # 安全检查：如果被刀者是狼人，记录警告（理论上狼人不会刀自己，但可能是bug）
                     if wolf_target_player.role == PlayerRole.WOLF:
-                        print(f"【警告】被刀者是狼人 {wolf_target_player.username}，这不应该发生（狼人不会刀自己）")
+                        logger.warning(f"【警告】被刀者是狼人 {wolf_target_player.username}，这不应该发生（狼人不会刀自己）")
                     
                     is_guarded = (guard_target == wolf_target)
                     is_saved = (witch_saved == wolf_target)
                     
                     role_name = self._get_role_name(wolf_target_player.role) if wolf_target_player.role else "未知"
-                    print(f"\n【被刀者处理】{wolf_target_player.username} ({role_name}) (ID: {wolf_target})")
-                    print(f"  - 是否被守卫保护: {is_guarded}")
-                    print(f"  - 是否被女巫救: {is_saved}")
+                    print(f"\n【被刀者处理】{wolf_target_player.username} ({role_name}) (ID: {wolf_target})", flush=True)
+                    print(f"  - 是否被守卫保护: {is_guarded}", flush=True)
+                    print(f"  - 是否被女巫救: {is_saved}", flush=True)
+                    logger.info(f"\n【被刀者处理】{wolf_target_player.username} ({role_name}) (ID: {wolf_target})")
+                    logger.info(f"  - 是否被守卫保护: {is_guarded}")
+                    logger.info(f"  - 是否被女巫救: {is_saved}")
                     
                     # 同守同救规则：如果同时被守和救，则死亡
                     if is_guarded and is_saved:
@@ -1983,19 +2203,22 @@ class WerewolfService:
                         wolf_target_player.died_by = 'wolf'
                         deaths.append(wolf_target_player.user_id)
                         death_reasons[wolf_target_player.user_id] = "被狼人击杀（同守同救）"
-                        print(f"  - 结果: 死亡（同守同救规则）")
+                        print(f"  - 结果: 死亡（同守同救规则）", flush=True)
+                        logger.info(f"  - 结果: 死亡（同守同救规则）")
                     # 被守或救，则存活
                     elif is_guarded or is_saved:
-                        print(f"  - 结果: 存活（被{'守卫保护' if is_guarded else '女巫救'}）")
+                        print(f"  - 结果: 存活（被{'守卫保护' if is_guarded else '女巫救'}）", flush=True)
+                        logger.info(f"  - 结果: 存活（被{'守卫保护' if is_guarded else '女巫救'}）")
                     # 未被守且未被救，则死亡
                     else:
                         wolf_target_player.alive = False
                         wolf_target_player.died_by = 'wolf'
                         deaths.append(wolf_target_player.user_id)
                         death_reasons[wolf_target_player.user_id] = "被狼人击杀"
-                        print(f"  - 结果: 死亡（未被保护且未被救）")
+                        print(f"  - 结果: 死亡（未被保护且未被救）", flush=True)
+                        logger.info(f"  - 结果: 死亡（未被保护且未被救）")
                 elif wolf_target_player and not wolf_target_player.alive:
-                    print(f"【被刀者处理】{wolf_target_player.username} 已被击杀，但之前已死亡")
+                    logger.info(f"【被刀者处理】{wolf_target_player.username} 已被击杀，但之前已死亡")
             
             # 处理被毒者（毒药无视守卫，直接死亡）
             if witch_poisoned:
@@ -2008,42 +2231,47 @@ class WerewolfService:
                         deaths.append(poisoned_player.user_id)
                         death_reasons[poisoned_player.user_id] = "被女巫毒死"
                         poisoned_role = self._get_role_name(poisoned_player.role) if poisoned_player.role else "未知"
-                        print(f"【被毒者处理】{poisoned_player.username} ({poisoned_role}) (ID: {witch_poisoned}) - 结果: 死亡（毒药无视守卫）")
+                        print(f"【被毒者处理】{poisoned_player.username} ({poisoned_role}) (ID: {witch_poisoned}) - 结果: 死亡（毒药无视守卫）", flush=True)
+                        logger.info(f"【被毒者处理】{poisoned_player.username} ({poisoned_role}) (ID: {witch_poisoned}) - 结果: 死亡（毒药无视守卫）")
                     else:
-                        print(f"【被毒者处理】{poisoned_player.username} 已在死亡列表中（可能同时被刀和毒）")
+                        logger.info(f"【被毒者处理】{poisoned_player.username} 已在死亡列表中（可能同时被刀和毒）")
                 elif poisoned_player and not poisoned_player.alive:
-                    print(f"【被毒者处理】{poisoned_player.username} 已被毒杀，但之前已死亡")
+                    logger.info(f"【被毒者处理】{poisoned_player.username} 已被毒杀，但之前已死亡")
             
-            # 打印最终死亡结果
-            print(f"\n【夜晚结算结果】")
+            # 打印最终死亡结果（强制刷新输出）
+            print(f"\n【夜晚结算结果】", flush=True)
+            logger.info(f"\n【夜晚结算结果】")
             if deaths:
                 for death_id in deaths:
                     dead_player = next((p for p in room.players if p.user_id == death_id), None)
                     if dead_player:
                         reason = death_reasons.get(death_id, "未知原因")
                         role_name = self._get_role_name(dead_player.role) if dead_player.role else "未知"
-                        print(f"  - {dead_player.username} ({role_name}) {reason}")
+                        print(f"  - {dead_player.username} ({role_name}) {reason}", flush=True)
+                        logger.info(f"  - {dead_player.username} ({role_name}) {reason}")
                         # 安全检查：如果死亡玩家是狼人，记录警告（除非是被女巫毒杀）
                         if dead_player.role == PlayerRole.WOLF and reason != "被女巫毒死":
-                            print(f"    【警告】死亡玩家是狼人，这不应该发生（除非被女巫毒杀）")
+                            print(f"    【警告】死亡玩家是狼人，这不应该发生（除非被女巫毒杀）", flush=True)
+                            logger.warning(f"    【警告】死亡玩家是狼人，这不应该发生（除非被女巫毒杀）")
             else:
-                print(f"  - 今晚是平安夜，无人死亡")
+                print(f"  - 今晚是平安夜，无人死亡", flush=True)
+                logger.info(f"  - 今晚是平安夜，无人死亡")
             
             # 最终安全检查：确保所有在死亡列表中的玩家确实被标记为死亡
-            print(f"\n【夜晚结算最终检查】")
+            logger.info(f"\n【夜晚结算最终检查】")
             for death_id in deaths:
                 dead_player = next((p for p in room.players if p.user_id == death_id), None)
                 if dead_player:
                     if dead_player.alive:
-                        print(f"  【错误】玩家 {dead_player.username} (ID: {death_id}) 在死亡列表中但alive=True！")
-                        print(f"    强制标记为死亡...")
+                        logger.error(f"  【错误】玩家 {dead_player.username} (ID: {death_id}) 在死亡列表中但alive=True！")
+                        logger.info(f"    强制标记为死亡...")
                         dead_player.alive = False
                     else:
-                        print(f"  ✓ {dead_player.username} (ID: {death_id}) - 已正确标记为死亡")
+                        logger.info(f"  ✓ {dead_player.username} (ID: {death_id}) - 已正确标记为死亡")
                 else:
-                    print(f"  【错误】死亡列表中的玩家ID {death_id} 不存在！")
+                    logger.error(f"  【错误】死亡列表中的玩家ID {death_id} 不存在！")
             
-            print(f"{'='*60}\n")
+            logger.info(f"{'='*60}\n")
             
             # 保存房间状态（确保死亡状态被正确保存）
             await redis_service.set_room_data(room.room_id, room.dict())
@@ -2059,20 +2287,20 @@ class WerewolfService:
                         if dead_player_check.alive:
                             # 这是一个严重的错误：玩家在死亡列表中但alive=True
                             # 这不应该发生，说明在夜晚结算时出现了问题
-                            print(f"【严重错误】玩家 {dead_player_check.username} (ID: {death_id}, 角色: {self._get_role_name(dead_player_check.role) if dead_player_check.role else '未知'}) 在死亡列表中但alive=True！")
-                            print(f"  这可能是夜晚结算时的bug，玩家不应该被添加到死亡列表。")
-                            print(f"  从死亡列表中移除该玩家，而不是强制标记为死亡。")
+                            logger.error(f"【严重错误】玩家 {dead_player_check.username} (ID: {death_id}, 角色: {self._get_role_name(dead_player_check.role) if dead_player_check.role else '未知'}) 在死亡列表中但alive=True！")
+                            logger.warning(f"  这可能是夜晚结算时的bug，玩家不应该被添加到死亡列表。")
+                            logger.info(f"  从死亡列表中移除该玩家，而不是强制标记为死亡。")
                             # 从死亡列表中移除，因为玩家实际上还活着
                             deaths.remove(death_id)
                             if death_id in death_reasons:
                                 del death_reasons[death_id]
                             # 确保玩家状态正确
                             dead_player_check.alive = True
-                            print(f"  已从死亡列表中移除玩家 {dead_player_check.username}，并确保其alive=True")
+                            logger.info(f"  已从死亡列表中移除玩家 {dead_player_check.username}，并确保其alive=True")
                         else:
                             # 死亡状态正确，确保已保存
                             if dead_player_check.alive:
-                                print(f"【警告】玩家 {dead_player_check.username} (ID: {death_id}) 的死亡状态未正确保存，强制更新")
+                                logger.warning(f"【警告】玩家 {dead_player_check.username} (ID: {death_id}) 的死亡状态未正确保存，强制更新")
                                 dead_player_check.alive = False
                                 await redis_service.set_room_data(room.room_id, check_room.dict())
                 
@@ -2080,13 +2308,19 @@ class WerewolfService:
                 for player in check_room.players:
                     if not player.alive and player.user_id not in deaths:
                         # 如果玩家被标记为死亡但不在deaths列表中，记录警告
-                        print(f"【信息】玩家 {player.username} (ID: {player.user_id}) 已死亡（之前夜晚），死亡原因: {player.died_by}")
+                        logger.info(f"【信息】玩家 {player.username} (ID: {player.user_id}) 已死亡（之前夜晚），死亡原因: {player.died_by}")
             
             # 进入白天阶段，公布死亡信息
             await self._start_day_phase(room, deaths, death_reasons)
         
+        except Exception as e:
+            # 捕获所有异常，确保日志能正常输出
+            logger.error(f"【夜晚结算异常】房间 {room.room_id} - 发生错误: {e}", exc_info=True)
+            logger.error(f"【夜晚结算异常】房间 {room.room_id} - 错误详情: {type(e).__name__}: {str(e)}")
+            # 重新抛出异常，让上层处理
+            raise
         finally:
-            # 移除处理标志
+            # 移除处理标志（无论成功还是失败都要移除）
             self.processing_night_result.discard(room.room_id)
     
     async def _start_day_phase(self, room: GameRoom, deaths: List[str], death_reasons: Dict[str, str]):
@@ -2096,27 +2330,39 @@ class WerewolfService:
         if room_data:
             room = GameRoom(**room_data)
         
+        # 打印明显的白天阶段开始日志
+        print(f"\n{'='*60}", flush=True)
+        print(f"【白天阶段开始】房间 {room.room_id} - 第 {room.day_count + 1} 天", flush=True)
+        print(f"{'='*60}", flush=True)
+        logger.info(f"\n{'='*60}")
+        logger.info(f"【白天阶段开始】房间 {room.room_id} - 第 {room.day_count + 1} 天")
+        logger.info(f"{'='*60}")
+        
         # 安全检查：确保只有真正死亡的玩家才被标记为死亡
-        print(f"【白天阶段开始】房间 {room.room_id} - 夜晚死亡列表: {deaths}")
-        print(f"【白天阶段开始】存活玩家检查:")
+        logger.info(f"【夜晚死亡列表】房间 {room.room_id} - 死亡玩家: {deaths}")
+        print(f"【夜晚死亡列表】房间 {room.room_id} - 死亡玩家: {deaths}", flush=True)
+        logger.info(f"【存活玩家检查】房间 {room.room_id}:")
+        print(f"【存活玩家检查】房间 {room.room_id}:", flush=True)
         for player in room.players:
             if player.alive and player.user_id in deaths:
                 # 这是一个严重的错误：玩家在死亡列表中但alive=True
                 # 这不应该发生，说明在夜晚结算时出现了问题
-                print(f"【严重错误】玩家 {player.username} (ID: {player.user_id}, 角色: {self._get_role_name(player.role) if player.role else '未知'}) 在死亡列表中但alive=True！")
-                print(f"  这可能是夜晚结算时的bug，玩家不应该被添加到死亡列表。")
-                print(f"  为了安全，我们不会强制标记为死亡，而是从死亡列表中移除。")
+                logger.error(f"【严重错误】玩家 {player.username} (ID: {player.user_id}, 角色: {self._get_role_name(player.role) if player.role else '未知'}) 在死亡列表中但alive=True！")
+                logger.warning(f"  这可能是夜晚结算时的bug，玩家不应该被添加到死亡列表。")
+                logger.info(f"  为了安全，我们不会强制标记为死亡，而是从死亡列表中移除。")
                 # 从死亡列表中移除，因为玩家实际上还活着
                 if player.user_id in deaths:
                     deaths.remove(player.user_id)
                     if player.user_id in death_reasons:
                         del death_reasons[player.user_id]
-                    print(f"  已从死亡列表中移除玩家 {player.username}")
+                    logger.info(f"  已从死亡列表中移除玩家 {player.username}")
             elif not player.alive and player.user_id not in deaths:
                 # 如果玩家被标记为死亡但不在当前夜晚的死亡列表中，可能是之前夜晚的死亡
-                print(f"【信息】玩家 {player.username} (ID: {player.user_id}) 已死亡（之前夜晚），死亡原因: {player.died_by}")
+                logger.info(f"【信息】玩家 {player.username} (ID: {player.user_id}) 已死亡（之前夜晚），死亡原因: {player.died_by}")
             elif player.alive:
-                print(f"  ✓ {player.username} (ID: {player.user_id}, 角色: {self._get_role_name(player.role) if player.role else '未知'}) - 存活")
+                role_info = f"角色: {self._get_role_name(player.role) if player.role else '未知'}"
+                logger.info(f"  ✓ {player.username} (ID: {player.user_id}, {role_info}) - 存活")
+                print(f"  ✓ {player.username} (ID: {player.user_id}, {role_info}) - 存活", flush=True)
         
         room.phase = GamePhase.DAY
         room.day_count += 1
@@ -2290,7 +2536,7 @@ class WerewolfService:
             
             return last_words.strip()
         except Exception as e:
-            print(f"AI玩家 {dead_player.username} 生成遗言失败: {e}")
+            logger.warning(f"AI玩家 {dead_player.username} 生成遗言失败: {e}")
             # 使用默认遗言
             role_name = self._get_role_name(dead_player.role) if dead_player.role else "玩家"
             if dead_player.role == PlayerRole.SEER:
@@ -2418,7 +2664,7 @@ class WerewolfService:
         
         # 确保当前处于投票阶段，如果不是则直接返回
         if room.phase != GamePhase.VOTING:
-            print(f"【警告】_process_voting_result 被调用，但当前阶段不是投票阶段: {room.phase}")
+            logger.warning(f"【警告】_process_voting_result 被调用，但当前阶段不是投票阶段: {room.phase}")
             return
         
         # 重新获取最新的房间数据，确保状态一致性
@@ -2494,8 +2740,8 @@ class WerewolfService:
         await self._ai_announce(current_room.room_id, f"投票结果：{vote_summary}。{eliminated_player.username}得票最高({max_votes}票)，被处决。")
         
         # 打印投票结果日志
-        print(f"【投票结果】房间 {current_room.room_id} - {eliminated_player.username} (ID: {eliminated_id}) 被投票出局，得票: {max_votes}")
-        print(f"  详细投票统计: {vote_details}")
+        logger.info(f"【投票结果】房间 {current_room.room_id} - {eliminated_player.username} (ID: {eliminated_id}) 被投票出局，得票: {max_votes}")
+        logger.info(f"  详细投票统计: {vote_details}")
         
         # 保存房间状态（使用current_room）
         await redis_service.set_room_data(current_room.room_id, current_room.dict())

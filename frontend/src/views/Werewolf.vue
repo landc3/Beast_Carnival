@@ -821,6 +821,20 @@ export default {
       return Math.max(0, Math.floor(remaining))
     })
     
+    // 获取当前玩家
+    const currentPlayer = computed(() => {
+      if (!room.value || !room.value.players) return null
+      return room.value.players.find(p => p.user_id === gameStore.userId)
+    })
+    
+    // 判断当前玩家是否真正死亡（只有明确为false时才认为是死亡）
+    const isCurrentPlayerDead = computed(() => {
+      // 如果当前玩家不存在，默认不是死亡
+      if (!currentPlayer.value) return false
+      // 只有明确为false时才认为是死亡，undefined或null都认为是存活
+      return currentPlayer.value.alive === false
+    })
+    
     // 计算是否允许发言
     const canSpeak = computed(() => {
       if (!room.value) return false
@@ -836,20 +850,6 @@ export default {
     const alivePlayersForVoting = computed(() => {
       if (!room.value || !room.value.players) return []
       return room.value.players.filter(p => p.alive)
-    })
-    
-    // 获取当前玩家
-    const currentPlayer = computed(() => {
-      if (!room.value || !room.value.players) return null
-      return room.value.players.find(p => p.user_id === gameStore.userId)
-    })
-    
-    // 判断当前玩家是否真正死亡（只有明确为false时才认为是死亡）
-    const isCurrentPlayerDead = computed(() => {
-      // 如果当前玩家不存在，默认不是死亡
-      if (!currentPlayer.value) return false
-      // 只有明确为false时才认为是死亡，undefined或null都认为是存活
-      return currentPlayer.value.alive === false
     })
     
     // 判断当前玩家是否存活（用于投票等操作）
@@ -1058,7 +1058,12 @@ export default {
           loadPrivateMessages()
         }
       } catch (error) {
-        console.error('加载房间失败:', error)
+        // 网络错误（如 ERR_NETWORK_CHANGED）通常是暂时的，静默处理
+        // 只在非网络错误时记录日志
+        if (error.code !== 'ERR_NETWORK_CHANGED' && error.message !== 'Network Error') {
+          console.error('加载房间失败:', error)
+        }
+        // 网络错误时不做任何处理，等待下次轮询重试
       }
     }
     
@@ -2116,6 +2121,9 @@ export default {
       getPhaseName,
       getPhaseNameWithTime,
       timeRemaining,
+      currentPlayer,
+      isCurrentPlayerDead,
+      isCurrentPlayerAlive,
       canSpeak,
       closeChat,
       confirmExit,

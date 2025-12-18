@@ -5,6 +5,7 @@ from typing import List, Dict
 import json
 import uuid
 import os
+import sys
 import logging
 
 from config import config
@@ -14,12 +15,46 @@ from services.werewolf_service import werewolf_service
 from services.ai_service import AIService
 from services.redis_service import redis_service
 
-# 配置日志
+# 配置日志 - 确保所有模块的日志都能输出
+# 先清除所有现有的处理器，避免重复
+root_logger = logging.getLogger()
+for handler in root_logger.handlers[:]:
+    root_logger.removeHandler(handler)
+
+# 配置基础日志
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S'
+    datefmt='%Y-%m-%d %H:%M:%S',
+    force=True,  # 强制重新配置，避免被其他配置覆盖
+    handlers=[
+        logging.StreamHandler(sys.stdout)  # 明确输出到stdout
+    ]
 )
+
+# 确保根 logger 配置正确
+root_logger = logging.getLogger()
+root_logger.setLevel(logging.INFO)
+
+# 确保 uvicorn 相关 logger 也能输出
+uvicorn_logger = logging.getLogger("uvicorn")
+uvicorn_logger.setLevel(logging.INFO)
+uvicorn_error_logger = logging.getLogger("uvicorn.error")
+uvicorn_error_logger.setLevel(logging.INFO)
+uvicorn_access_logger = logging.getLogger("uvicorn.access")
+uvicorn_access_logger.setLevel(logging.INFO)
+
+# 确保所有服务模块的日志都能输出
+for module_name in ['services.werewolf_service', 'services.ai_service', 'services.redis_service', 
+                    'services.character_service', 'services.event_service', 'services', 'main']:
+    module_logger = logging.getLogger(module_name)
+    module_logger.setLevel(logging.INFO)
+    module_logger.propagate = True  # 允许向上传播到根 logger
+
+logger = logging.getLogger(__name__)
+logger.info("=" * 60)
+logger.info("后端服务启动中...")
+logger.info("=" * 60)
 
 app = FastAPI(title="Beast Carnival API")
 
@@ -62,7 +97,7 @@ class ConnectionManager:
                     try:
                         await websocket.send_text(message)
                     except Exception as e:
-                        print(f"发送私有消息失败 (房间 {room_id}, 用户 {user_id}): {e}")
+                        logger.error(f"发送私有消息失败 (房间 {room_id}, 用户 {user_id}): {e}")
     
     async def broadcast(self, message: str, room_id: str):
         if room_id in self.active_connections:
@@ -70,15 +105,62 @@ class ConnectionManager:
                 try:
                     await websocket.send_text(message)
                 except Exception as e:
-                    print(f"广播消息失败 (房间 {room_id}): {e}")
+                    logger.error(f"广播消息失败 (房间 {room_id}): {e}")
 
 manager = ConnectionManager()
+
+# 启动事件处理器
+@app.on_event("startup")
+async def startup_event():
+    """服务器启动时的初始化"""
+    try:
+        logger.info(f"后端服务已启动，监听地址: http://{config.HOST}:{config.PORT}")
+        logger.info(f"API文档: http://{config.HOST}:{config.PORT}/docs")
+        # 测试Redis连接
+        try:
+            import asyncio
+            # 使用asyncio.to_thread来调用同步的ping方法
+            await asyncio.to_thread(redis_service.redis_client.ping)
+            logger.info("✓ Redis连接正常")
+        except Exception as e:
+            logger.warning(f"⚠ Redis连接测试失败: {e}")
+        logger.info("=" * 60)
+    except Exception as e:
+        logger.error(f"启动事件处理失败: {e}", exc_info=True)
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """服务器关闭时的清理"""
+    logger.info("后端服务正在关闭...")
 
 # ==================== 基础API ====================
 
 @app.get("/")
 async def root():
-    return {"message": "Beast Carnival API", "version": "1.0.0"}
+    return {"message": "Beast Carnival API", "version": "1.0.0", "status": "running"}
+
+@app.get("/health")
+async def health_check():
+    """健康检查端点"""
+    try:
+        # 检查Redis连接
+        redis_ok = False
+        try:
+            import asyncio
+            await asyncio.to_thread(redis_service.redis_client.ping)
+            redis_ok = True
+        except:
+            pass
+        
+        return {
+            "status": "healthy",
+            "redis": "connected" if redis_ok else "disconnected",
+            "port": config.PORT,
+            "host": config.HOST
+        }
+    except Exception as e:
+        logger.error(f"健康检查失败: {e}", exc_info=True)
+        return {"status": "unhealthy", "error": str(e)}
 
 @app.get("/api/worldview")
 async def get_worldview():
@@ -306,6 +388,22 @@ async def start_werewolf_game(room_id: str, background_tasks: BackgroundTasks):
                     "room": room.dict()
                 }), f"werewolf_{room_id}")
                 
+                # 确保所有已连接的玩家都能收到私有消息
+                # 从 Redis 获取所有私有消息并发送给对应的玩家
+                for player in room.players:
+                    private_messages = await redis_service.get_private_messages(room_id, player.user_id)
+                    for msg in private_messages:
+                        # 只发送身份消息（type为identity的消息）
+                        if msg.get("type") == "identity":
+                            await manager.send_personal_message_to_user(
+                                room_id,  # send_personal_message_to_user 内部会自动添加 werewolf_ 前缀
+                                player.user_id,
+                                json.dumps({
+                                    "type": "private_message",
+                                    "content": msg
+                                })
+                            )
+                
                 # 广播所有公共消息（包括阶段弹窗消息）
                 public_messages = await redis_service.get_room_messages(room_id)
                 for msg in public_messages:
@@ -324,9 +422,7 @@ async def start_werewolf_game(room_id: str, background_tasks: BackgroundTasks):
                     # 启动夜晚阶段（这会花费较长时间）
                     await werewolf_service._start_night_phase(room_id)
                 except Exception as e:
-                    print(f"后台启动夜晚阶段失败 (房间 {room_id}): {e}")
-                    import traceback
-                    traceback.print_exc()
+                    logger.error(f"后台启动夜晚阶段失败 (房间 {room_id}): {e}", exc_info=True)
             
             # 添加后台任务
             background_tasks.add_task(start_night_phase_background)
@@ -337,9 +433,7 @@ async def start_werewolf_game(room_id: str, background_tasks: BackgroundTasks):
     except HTTPException:
         raise
     except Exception as e:
-        print(f"开始游戏异常: {e}")
-        import traceback
-        traceback.print_exc()
+        logger.error(f"开始游戏异常: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"开始游戏失败：{str(e)}")
 
 @app.get("/api/werewolf/room/{room_id}")

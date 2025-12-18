@@ -53,7 +53,7 @@ REDIS_HOST=localhost
 REDIS_PORT=6379
 REDIS_DB=0
 HOST=0.0.0.0
-PORT=8000
+PORT=1998
 ```
 
 ### 4. 启动Redis
@@ -79,17 +79,18 @@ redis-cli ping
 
 ### 5. 启动后端服务
 
+**推荐方式（自动启动前端）：**
 ```bash
 cd backend
-python main.py
+python run.py
 ```
 
-或者使用uvicorn直接运行：
+或者使用uvicorn直接运行（需要手动启动前端）：
 ```bash
-uvicorn main:app --reload --host 0.0.0.0 --port 8000
+uvicorn main:app --reload --host 0.0.0.0 --port 1998
 ```
 
-后端服务将在 `http://localhost:8000` 启动
+后端服务将在 `http://localhost:1998` 启动
 
 ### 6. 安装前端依赖
 
@@ -102,11 +103,14 @@ npm install
 
 ### 7. 启动前端服务
 
+**注意**：如果使用 `python run.py` 启动后端，前端会自动启动，无需手动执行此步骤。
+
+手动启动前端（仅在直接使用 `python main.py` 时需要）：
 ```bash
 npm run dev
 ```
 
-前端服务将在 `http://localhost:3000` 启动
+前端服务将在 `http://localhost:4399` 启动
 
 ## 使用一键启动脚本
 
@@ -125,7 +129,7 @@ chmod +x start.sh
 
 ## 验证安装
 
-1. 打开浏览器访问 `http://localhost:3000`
+1. 打开浏览器访问 `http://localhost:4399`（使用 `run.py` 会自动打开）
 2. 应该看到"猛兽派对"首页
 3. 点击"查看角色"应该能看到角色列表
 4. 点击"开始狼人杀"可以创建房间
@@ -154,8 +158,8 @@ chmod +x start.sh
 **错误**: `Address already in use`
 
 **解决**:
-- 修改 `backend/.env` 中的 `PORT` 配置
-- 或修改 `frontend/vite.config.js` 中的端口配置
+- 修改 `backend/.env` 中的 `PORT` 配置（默认1998）
+- 或修改 `frontend/vite.config.js` 中的端口配置（默认4399）
 
 ### 4. 前端无法连接后端
 
@@ -240,7 +244,7 @@ ip addr show
 
 #### 2. 确保服务已正确启动
 
-- **后端服务**：已配置为绑定到 `0.0.0.0:1998`（在 `backend/config.py` 中）
+- **后端服务**：已配置为绑定到 `0.0.0.0:1998`（在 `backend/config.py` 中，可通过 `.env` 文件修改）
 - **前端服务**：已配置为绑定到 `0.0.0.0:4399`（在 `frontend/vite.config.js` 中）
 
 #### 3. 配置防火墙
