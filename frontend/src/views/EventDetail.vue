@@ -158,19 +158,24 @@ export default {
           
           // 检查事件是否完成
           if (data.event_completed) {
+            console.log('事件已完成，显示弹窗')
             // 更新本地事件状态
             if (event.value) {
               event.value.completed = true
             }
-            showEventCompletedModal()
+            // 延迟一点显示弹窗，确保消息已经渲染
+            setTimeout(() => {
+              showEventCompletedModal()
+            }, 500)
           }
           
           // 检查是否有解锁的角色
           if (data.unlocked_characters && data.unlocked_characters.length > 0) {
+            console.log('有角色解锁:', data.unlocked_characters)
             // 延迟显示角色解锁弹窗，让事件完成弹窗先显示
             setTimeout(() => {
               showCharacterUnlockModal(data.unlocked_characters)
-            }, 1500)
+            }, 2000)
           }
         }
       }
@@ -211,6 +216,7 @@ export default {
     }
     
     const showEventCompletedModal = () => {
+      console.log('显示事件完成弹窗')
       eventCompletedModal.value = {
         show: true,
         message: '你太棒了！完成了第一个大事件！'
@@ -222,6 +228,7 @@ export default {
     }
     
     const showCharacterUnlockModal = (characters) => {
+      console.log('显示角色解锁弹窗:', characters)
       characterUnlockModal.value = {
         show: true,
         characters: characters

@@ -385,6 +385,7 @@ async def event_chat(websocket: WebSocket, user_id: str, event_id: str):
             await event_service.save_event_progress(user_id, event_id, progress)
             
             # 检查是否完成：需要找到所有线索 AND 玩家说出正确答案
+            # 或者AI回复中明确表示已完成
             event_completed = False
             unlocked_characters = []
             
@@ -392,16 +393,40 @@ async def event_chat(websocket: WebSocket, user_id: str, event_id: str):
                 has_all_clues = len(progress["found_clues"]) >= len(event["clues"])
                 solution_matched = event_service.check_solution_match(event_id, user_message)
                 
-                if has_all_clues and solution_matched:
+                # 检查AI回复中是否包含完成提示（更宽松的检测）
+                ai_completion_keywords = [
+                    "恭喜", "解开了", "成功", "完成了", "揭开了谜题", "找到了真相",
+                    "最后一层", "完全理解", "成功", "让这个城市的角落", "多了一份",
+                    "成功地让", "成功地", "成功解开了"
+                ]
+                ai_indicates_completion = any(keyword in ai_response for keyword in ai_completion_keywords)
+                
+                # 调试日志
+                logging.info(f"[事件完成检测] 用户: {user_id}, 事件: {event_id}")
+                logging.info(f"[事件完成检测] 找到线索数: {len(progress['found_clues'])}/{len(event['clues'])}, 所有线索: {has_all_clues}")
+                logging.info(f"[事件完成检测] 答案匹配: {solution_matched}, AI表示完成: {ai_indicates_completion}")
+                
+                # 如果满足以下任一条件，就标记为完成：
+                # 1. 找到所有线索且玩家说出了正确答案
+                # 2. AI明确表示完成（即使没有所有线索，只要玩家说出了正确答案）
+                # 3. 玩家说出了正确答案（即使没有所有线索，只要答案匹配度高，也应该完成）
+                # 对于完整答案，即使没有所有线索也应该完成
+                if (has_all_clues and solution_matched) or (ai_indicates_completion and solution_matched) or solution_matched:
+                    logging.info(f"[事件完成] 标记事件为已完成: {event_id}")
                     await event_service.complete_event(user_id, event_id)
                     event_completed = True
-                    ai_response += "\n\n🎉 恭喜！你解开了谜题！真相是：" + event.get("solution", "")
+                    
+                    # 如果AI回复中还没有恭喜信息，添加一个
+                    if not any(keyword in ai_response for keyword in ["🎉", "恭喜"]):
+                        ai_response += "\n\n🎉 恭喜！你解开了谜题！真相是：" + event.get("solution", "")
                     
                     # 检查并解锁符合条件的角色
                     unlocked_characters = await character_service.check_and_unlock_characters(user_id)
+                    logging.info(f"[事件完成] 解锁角色数: {len(unlocked_characters)}")
                 elif solution_matched and not has_all_clues:
-                    # 玩家说出了答案但还没找到所有线索，给予提示
-                    ai_response += "\n\n💡 你的推理方向很接近了！但还需要更多线索来确认。继续调查吧！"
+                    # 这个分支现在不会执行，因为上面已经处理了solution_matched的情况
+                    # 保留作为备用逻辑
+                    pass
             
             # 发送回复
             response_data = {

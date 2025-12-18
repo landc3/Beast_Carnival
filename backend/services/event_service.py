@@ -100,6 +100,12 @@ class EventService:
             # 至少需要匹配4个关键要素组中的2个，且必须包含"狐狸"或"偷"相关（核心要素）
             matched_groups = sum(1 for group in key_terms if any(term in user_message_lower for term in group))
             has_core_terms = any(term in user_message_lower for group in [key_terms[0], key_terms[1]] for term in group)
+            
+            # 如果用户输入了完整的答案（包含所有关键要素），直接返回True
+            if matched_groups >= 3 and has_core_terms:
+                return True
+            
+            # 否则需要至少匹配2个关键要素组，且必须包含核心要素
             return matched_groups >= 2 and has_core_terms
         elif event_id == "event_dog_mystery":
             # "失踪的小主人"事件
