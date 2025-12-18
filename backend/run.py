@@ -92,6 +92,7 @@ def check_port(port):
 if __name__ == "__main__":
     # 设置环境变量，禁用 Python 缓冲，确保日志立即输出
     import os
+    # cSpell:ignore PYTHONUNBUFFERED
     os.environ['PYTHONUNBUFFERED'] = '1'
     
     # 强制刷新 stdout 和 stderr
@@ -152,20 +153,12 @@ if __name__ == "__main__":
     )
     
     # 确保所有服务模块的 logger 都配置正确
+    # 允许日志向上传播，确保所有日志都能输出
     for module_name in ['services.werewolf_service', 'services.ai_service', 'services.redis_service', 
                         'services.character_service', 'services.event_service', 'services', 'main']:
         module_logger = logging.getLogger(module_name)
         module_logger.setLevel(logging.INFO)
-        module_logger.propagate = True
-        # 确保有 handler
-        if not module_logger.handlers:
-            handler = logging.StreamHandler(sys.stdout)
-            handler.setLevel(logging.INFO)
-            handler.setFormatter(logging.Formatter(
-                '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-                datefmt='%Y-%m-%d %H:%M:%S'
-            ))
-            module_logger.addHandler(handler)
+        module_logger.propagate = True  # 允许向上传播，确保日志能输出
     
     log_config = {
         "version": 1,
@@ -173,6 +166,7 @@ if __name__ == "__main__":
         "formatters": {
             "default": {
                 "()": "uvicorn.logging.DefaultFormatter",
+                # cSpell:ignore levelprefix
                 "fmt": "%(levelprefix)s %(message)s",
                 "use_colors": None,
             },
@@ -207,13 +201,17 @@ if __name__ == "__main__":
             "uvicorn.error": {"handlers": ["default"], "level": "INFO", "propagate": False},
             "uvicorn.access": {"handlers": ["access"], "level": "INFO", "propagate": False},
             # 添加其他模块的 logger 配置，确保日志能输出
-            # 注意：propagate=True 允许日志向上传播到根 logger（main.py 中配置的）
+            # 允许 propagate=True，确保日志能输出到根 logger
             "services.werewolf_service": {"handlers": ["detailed"], "level": "INFO", "propagate": True},
             "services.ai_service": {"handlers": ["detailed"], "level": "INFO", "propagate": True},
             "services.redis_service": {"handlers": ["detailed"], "level": "INFO", "propagate": True},
             "services.character_service": {"handlers": ["detailed"], "level": "INFO", "propagate": True},
             "services.event_service": {"handlers": ["detailed"], "level": "INFO", "propagate": True},
             "main": {"handlers": ["detailed"], "level": "INFO", "propagate": True},
+        },
+        "root": {
+            "handlers": ["detailed"],
+            "level": "INFO",
         },
     }
     

@@ -952,17 +952,43 @@ export default {
     }
     
     const createRoom = async () => {
+      // 验证用户名
+      if (!username.value || !username.value.trim()) {
+        showErrorModal('请先输入你的名字！')
+        return
+      }
+      
       try {
+        console.log('【前端】开始创建房间...')
         const res = await createWerewolfRoom()
-        roomId.value = res.data.room_id
-        await joinRoom(res.data.room_id)
+        console.log('【前端】创建房间响应:', res)
+        if (res && res.data && res.data.room_id) {
+          roomId.value = res.data.room_id
+          await joinRoom(res.data.room_id)
+        } else {
+          console.error('【前端】创建房间响应格式错误:', res)
+          alert('创建房间失败：服务器返回格式错误')
+        }
       } catch (error) {
-        console.error('创建房间失败:', error)
-        alert('创建房间失败')
+        console.error('【前端】创建房间失败:', error)
+        console.error('【前端】错误详情:', {
+          message: error.message,
+          response: error.response,
+          status: error.response?.status,
+          data: error.response?.data
+        })
+        const errorMsg = error.response?.data?.detail || error.message || '创建房间失败'
+        alert(`创建房间失败: ${errorMsg}`)
       }
     }
     
     const joinRoom = async (targetRoomId = null) => {
+      // 验证用户名
+      if (!username.value || !username.value.trim()) {
+        showErrorModal('请先输入你的名字！')
+        return
+      }
+      
       const targetId = targetRoomId || joinRoomId.value
       if (!targetId || !targetId.trim()) {
         showErrorModal('房间号输入错误或没有输入房间号！')
@@ -970,14 +996,15 @@ export default {
       }
       
       try {
-        await joinWerewolfRoom(targetId, gameStore.userId, username.value)
+        await joinWerewolfRoom(targetId, gameStore.userId, username.value.trim())
         roomId.value = targetId
-        gameStore.setUsername(username.value)
+        gameStore.setUsername(username.value.trim())
         connectWebSocket()
         startPolling()
       } catch (error) {
         console.error('加入房间失败:', error)
-        showErrorModal('房间号输入错误或没有输入房间号！')
+        const errorMsg = error.response?.data?.detail || error.message || '加入房间失败'
+        showErrorModal(errorMsg)
       }
     }
     

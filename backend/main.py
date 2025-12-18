@@ -1,12 +1,15 @@
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, BackgroundTasks
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, BackgroundTasks, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import JSONResponse
 from typing import List, Dict
 import json
 import uuid
 import os
 import sys
 import logging
+import time
+import traceback
 
 from config import config
 from services.character_service import character_service
@@ -45,20 +48,60 @@ uvicorn_access_logger = logging.getLogger("uvicorn.access")
 uvicorn_access_logger.setLevel(logging.INFO)
 
 # 确保所有服务模块的日志都能输出
+# 允许 propagate=True，确保日志能输出
 for module_name in ['services.werewolf_service', 'services.ai_service', 'services.redis_service', 
                     'services.character_service', 'services.event_service', 'services', 'main']:
     module_logger = logging.getLogger(module_name)
     module_logger.setLevel(logging.INFO)
-    module_logger.propagate = True  # 允许向上传播到根 logger
+    module_logger.propagate = True  # 允许向上传播，确保日志能输出
 
 logger = logging.getLogger(__name__)
-logger.info("=" * 60)
-logger.info("后端服务启动中...")
-logger.info("=" * 60)
+# 启动信息将在 startup_event 中统一输出，避免重复
+
+# 在应用创建时立即输出，确保模块已加载
+print("=" * 60, flush=True)
+print("【模块加载】main.py 模块正在加载...", flush=True)
+print("=" * 60, flush=True)
+sys.stdout.write("=" * 60 + "\n")
+sys.stdout.write("【模块加载】main.py 模块正在加载...\n")
+sys.stdout.write("=" * 60 + "\n")
+sys.stdout.flush()
 
 app = FastAPI(title="Beast Carnival API")
 
-# CORS配置
+print("【模块加载】FastAPI 应用对象已创建", flush=True)
+sys.stdout.write("【模块加载】FastAPI 应用对象已创建\n")
+sys.stdout.flush()
+
+# 全局异常处理器
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """全局异常处理器，确保所有异常都被记录"""
+    error_type = type(exc).__name__
+    error_msg = str(exc)
+    error_trace = traceback.format_exc()
+    
+    # 强制输出错误信息
+    print("=" * 60, flush=True)
+    print(f"【全局异常】{request.method} {request.url.path}", flush=True)
+    print(f"错误类型: {error_type}", flush=True)
+    print(f"错误信息: {error_msg}", flush=True)
+    print(f"错误堆栈:\n{error_trace}", flush=True)
+    print("=" * 60, flush=True)
+    
+    logger.error(f"【全局异常】{request.method} {request.url.path} - {error_type}: {error_msg}", exc_info=True)
+    
+    # 如果是 HTTPException，直接抛出
+    if isinstance(exc, HTTPException):
+        raise exc
+    
+    # 其他异常返回 500
+    return JSONResponse(
+        status_code=500,
+        content={"detail": f"内部服务器错误: {error_msg}"}
+    )
+
+# CORS配置 - 必须先添加，因为中间件执行顺序是后进先出
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -66,6 +109,63 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# 请求日志中间件 - 后添加，所以会先执行
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    """记录所有HTTP请求和响应"""
+    start_time = time.time()
+    
+    # 强制输出请求信息，确保能看到
+    request_info = f"【请求】{request.method} {request.url.path}"
+    if request.url.query:
+        request_info += f"?{request.url.query}"
+    
+    # 使用多种方式输出，确保能看到
+    sys.stdout.write("=" * 60 + "\n")
+    sys.stdout.write(request_info + "\n")
+    sys.stdout.write("=" * 60 + "\n")
+    sys.stdout.flush()
+    print("=" * 60, flush=True)
+    print(request_info, flush=True)
+    print("=" * 60, flush=True)
+    logger.info(request_info)
+    
+    try:
+        response = await call_next(request)
+        process_time = time.time() - start_time
+        
+        # 记录响应
+        response_info = f"【响应】{request.method} {request.url.path} - 状态码: {response.status_code} - 耗时: {process_time:.3f}s"
+        print(response_info, flush=True)
+        sys.stdout.write(response_info + "\n")
+        sys.stdout.flush()
+        logger.info(response_info)
+        
+        return response
+    except Exception as e:
+        process_time = time.time() - start_time
+        error_msg = f"【请求异常】{request.method} {request.url.path} - 错误: {str(e)} - 耗时: {process_time:.3f}s"
+        error_trace = traceback.format_exc()
+        
+        # 强制输出错误信息
+        print("=" * 60, flush=True)
+        print(error_msg, flush=True)
+        print(f"错误堆栈:\n{error_trace}", flush=True)
+        print("=" * 60, flush=True)
+        sys.stdout.write("=" * 60 + "\n")
+        sys.stdout.write(error_msg + "\n")
+        sys.stdout.write(f"错误堆栈:\n{error_trace}\n")
+        sys.stdout.write("=" * 60 + "\n")
+        sys.stdout.flush()
+        
+        logger.error(error_msg, exc_info=True)
+        
+        # 返回500错误响应
+        return JSONResponse(
+            status_code=500,
+            content={"detail": f"内部服务器错误: {str(e)}"}
+        )
 
 # WebSocket连接管理
 class ConnectionManager:
@@ -114,13 +214,22 @@ manager = ConnectionManager()
 async def startup_event():
     """服务器启动时的初始化"""
     try:
+        print("=" * 60, flush=True)
+        print("【启动事件】FastAPI 应用启动中...", flush=True)
+        print("=" * 60, flush=True)
+        sys.stdout.write("=" * 60 + "\n")
+        sys.stdout.write("【启动事件】FastAPI 应用启动中...\n")
+        sys.stdout.write("=" * 60 + "\n")
+        sys.stdout.flush()
+        
         logger.info(f"后端服务已启动，监听地址: http://{config.HOST}:{config.PORT}")
         logger.info(f"API文档: http://{config.HOST}:{config.PORT}/docs")
+        print(f"后端服务已启动，监听地址: http://{config.HOST}:{config.PORT}", flush=True)
+        print(f"API文档: http://{config.HOST}:{config.PORT}/docs", flush=True)
         # 测试Redis连接
         try:
-            import asyncio
-            # 使用asyncio.to_thread来调用同步的ping方法
-            await asyncio.to_thread(redis_service.redis_client.ping)
+            # 直接使用同步ping，Redis操作很快
+            redis_service.redis_client.ping()
             logger.info("✓ Redis连接正常")
         except Exception as e:
             logger.warning(f"⚠ Redis连接测试失败: {e}")
@@ -147,7 +256,11 @@ async def health_check():
         redis_ok = False
         try:
             import asyncio
-            await asyncio.to_thread(redis_service.redis_client.ping)
+            try:
+                loop = asyncio.get_running_loop()
+            except RuntimeError:
+                loop = asyncio.get_event_loop()
+            await loop.run_in_executor(redis_service.executor, redis_service.redis_client.ping)
             redis_ok = True
         except:
             pass
@@ -344,21 +457,110 @@ async def event_chat(websocket: WebSocket, user_id: str, event_id: str):
     except WebSocketDisconnect:
         manager.disconnect(websocket, f"event_{user_id}_{event_id}")
 
+# ==================== 健康检查和测试路由 ====================
+
+@app.get("/")
+async def root():
+    """根路径，用于健康检查"""
+    return {"status": "ok", "message": "Beast Carnival API is running"}
+
+@app.get("/health")
+async def health_check():
+    """健康检查端点"""
+    print("=" * 60, flush=True)
+    print("【健康检查】收到 GET /health 请求", flush=True)
+    print("=" * 60, flush=True)
+    return {"status": "healthy", "service": "Beast Carnival API"}
+
+@app.get("/api/test")
+async def test_endpoint():
+    """测试端点，验证请求是否能到达后端"""
+    print("=" * 60, flush=True)
+    print("【测试端点】收到 GET /api/test 请求", flush=True)
+    print("=" * 60, flush=True)
+    sys.stdout.write("=" * 60 + "\n")
+    sys.stdout.write("【测试端点】收到 GET /api/test 请求\n")
+    sys.stdout.write("=" * 60 + "\n")
+    sys.stdout.flush()
+    return {"status": "ok", "message": "后端正常工作"}
+
+@app.post("/api/test")
+async def test_post_endpoint():
+    """测试 POST 端点"""
+    print("=" * 60, flush=True)
+    print("【测试端点】收到 POST /api/test 请求", flush=True)
+    print("=" * 60, flush=True)
+    sys.stdout.write("=" * 60 + "\n")
+    sys.stdout.write("【测试端点】收到 POST /api/test 请求\n")
+    sys.stdout.write("=" * 60 + "\n")
+    sys.stdout.flush()
+    return {"status": "ok", "message": "POST 请求正常工作"}
+
 # ==================== 狼人杀游戏 ====================
 
 @app.post("/api/werewolf/room")
 async def create_werewolf_room():
     """创建狼人杀房间"""
-    room_id = await werewolf_service.create_room()
-    return {"room_id": room_id}
+    # 强制输出，确保能看到请求 - 使用多种方式
+    sys.stdout.write("=" * 60 + "\n")
+    sys.stdout.write("【API路由】收到创建房间请求\n")
+    sys.stdout.write("=" * 60 + "\n")
+    sys.stdout.flush()
+    print("=" * 60, flush=True)
+    print("【API路由】收到创建房间请求", flush=True)
+    print("=" * 60, flush=True)
+    
+    try:
+        logger.info(f"【API调用】创建房间 - 开始")
+        print(f"【API调用】创建房间 - 开始", flush=True)
+        sys.stdout.write("【API调用】创建房间 - 开始\n")
+        sys.stdout.flush()
+        
+        room_id = await werewolf_service.create_room()
+        
+        logger.info(f"【API调用】创建房间成功 - 房间ID: {room_id}")
+        print(f"【API调用】创建房间成功 - 房间ID: {room_id}", flush=True)
+        
+        return {"room_id": room_id}
+    except HTTPException:
+        # 重新抛出HTTPException，不记录为错误
+        raise
+    except Exception as e:
+        error_detail = f"创建房间失败: {str(e)}"
+        error_trace = traceback.format_exc()
+        error_type = type(e).__name__
+        
+        # 强制输出错误信息到控制台
+        print("=" * 60, flush=True)
+        print(f"【API错误】创建房间失败!", flush=True)
+        print(f"错误类型: {error_type}", flush=True)
+        print(f"错误信息: {error_detail}", flush=True)
+        print(f"完整堆栈:\n{error_trace}", flush=True)
+        print("=" * 60, flush=True)
+        
+        # 同时使用 logger
+        logger.error(f"【API错误】创建房间失败: {error_type}: {error_detail}")
+        logger.error(f"【错误堆栈】\n{error_trace}")
+        
+        raise HTTPException(status_code=500, detail=error_detail)
 
 @app.post("/api/werewolf/room/{room_id}/join")
 async def join_werewolf_room(room_id: str, user_id: str, username: str):
     """加入狼人杀房间"""
-    success = await werewolf_service.join_room(room_id, user_id, username)
-    if success:
-        return {"success": True, "room_id": room_id}
-    raise HTTPException(status_code=400, detail="加入房间失败")
+    try:
+        logger.info(f"【API调用】加入房间 - 房间ID: {room_id}, 用户ID: {user_id}, 用户名: {username}")
+        success = await werewolf_service.join_room(room_id, user_id, username)
+        if success:
+            logger.info(f"【API调用】加入房间成功 - 房间ID: {room_id}, 用户ID: {user_id}")
+            return {"success": True, "room_id": room_id}
+        else:
+            logger.warning(f"【API调用】加入房间失败 - 房间ID: {room_id}, 用户ID: {user_id}")
+            raise HTTPException(status_code=400, detail="加入房间失败")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"【API错误】加入房间异常 - 房间ID: {room_id}, 用户ID: {user_id}, 错误: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"加入房间失败: {str(e)}")
 
 @app.post("/api/werewolf/room/{room_id}/start")
 async def start_werewolf_game(room_id: str, background_tasks: BackgroundTasks):
@@ -385,7 +587,7 @@ async def start_werewolf_game(room_id: str, background_tasks: BackgroundTasks):
                 # 广播房间状态更新
                 await manager.broadcast(json.dumps({
                     "type": "room_update",
-                    "room": room.dict()
+                    "room": room.model_dump()
                 }), f"werewolf_{room_id}")
                 
                 # 确保所有已连接的玩家都能收到私有消息
@@ -441,7 +643,7 @@ async def get_werewolf_room(room_id: str):
     """获取房间信息"""
     room = await werewolf_service.get_room(room_id)
     if room:
-        return room.dict()
+        return room.model_dump()
     raise HTTPException(status_code=404, detail="房间不存在")
 
 @app.post("/api/werewolf/room/{room_id}/add-ai")
@@ -472,7 +674,7 @@ async def werewolf_game(websocket: WebSocket, room_id: str, user_id: str):
         # 发送房间状态
         await websocket.send_text(json.dumps({
             "type": "room_state",
-            "room": room.dict()
+            "room": room.model_dump()
         }))
         
         # 发送私有消息
@@ -548,7 +750,7 @@ async def werewolf_game(websocket: WebSocket, room_id: str, user_id: str):
                     # 广播房间更新
                     await manager.broadcast(json.dumps({
                         "type": "room_update",
-                        "room": room.dict()
+                        "room": room.model_dump()
                     }), f"werewolf_{room_id}")
                     
                     # 触发AI玩家自动回复
@@ -584,7 +786,7 @@ async def werewolf_game(websocket: WebSocket, room_id: str, user_id: str):
                     
                     await manager.broadcast(json.dumps({
                         "type": "room_update",
-                        "room": room.dict()
+                        "room": room.model_dump()
                     }), f"werewolf_{room_id}")
             
             elif action_type == "hunter_shot":
@@ -607,7 +809,7 @@ async def werewolf_game(websocket: WebSocket, room_id: str, user_id: str):
                     
                     await manager.broadcast(json.dumps({
                         "type": "room_update",
-                        "room": room.dict()
+                        "room": room.model_dump()
                     }), f"werewolf_{room_id}")
             
             # 广播更新（用于其他类型的action）
@@ -616,7 +818,7 @@ async def werewolf_game(websocket: WebSocket, room_id: str, user_id: str):
                 if room:
                     await manager.broadcast(json.dumps({
                         "type": "room_update",
-                        "room": room.dict()
+                        "room": room.model_dump()
                     }), f"werewolf_{room_id}")
     
     except WebSocketDisconnect:

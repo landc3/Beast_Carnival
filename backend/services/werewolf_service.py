@@ -105,64 +105,158 @@ class WerewolfService:
     
     async def create_room(self, room_id: Optional[str] = None) -> str:
         """创建房间"""
-        if not room_id:
-            room_id = str(uuid.uuid4())[:8]
-        
-        room = GameRoom(
-            room_id=room_id,
-            players=[],
-            phase=GamePhase.WAITING,
-            day_count=0,
-            night_count=0,
-            messages=[],
-            private_messages={},
-            winner=None
-        )
-        
-        await redis_service.set_room_data(room_id, room.dict())
-        return room_id
+        try:
+            logger.info(f"【创建房间】开始创建房间")
+            print(f"【创建房间】开始创建房间", flush=True)
+            
+            if not room_id:
+                room_id = str(uuid.uuid4())[:8]
+            
+            logger.info(f"【创建房间】生成房间ID: {room_id}")
+            print(f"【创建房间】生成房间ID: {room_id}", flush=True)
+            
+            # 创建房间对象，确保所有字段都有默认值
+            room = GameRoom(
+                room_id=room_id,
+                players=[],
+                phase=GamePhase.WAITING,
+                day_count=0,
+                night_count=0,
+                messages=[],
+                private_messages={},
+                winner=None,
+                night_actions={},
+                current_night_phase=None,
+                eliminated_tonight=None,
+                saved_tonight=None,
+                phase_start_time=None,
+                phase_duration=None,
+                can_speak=False
+            )
+            
+            logger.info(f"【创建房间】房间对象创建成功，准备序列化")
+            print(f"【创建房间】房间对象创建成功，准备序列化", flush=True)
+            
+            # 使用 mode='json' 确保所有值都是 JSON 可序列化的
+            # 如果失败，尝试使用默认模式并手动处理
+            try:
+                logger.info(f"【创建房间】尝试使用 mode='json' 序列化")
+                print(f"【创建房间】尝试使用 mode='json' 序列化", flush=True)
+                room_data = room.model_dump(mode='json')
+                logger.info(f"【创建房间】房间数据序列化成功 (mode='json')")
+                print(f"【创建房间】房间数据序列化成功 (mode='json')", flush=True)
+            except Exception as e:
+                logger.warning(f"【创建房间】mode='json' 序列化失败，尝试默认模式: {e}")
+                print(f"【创建房间】mode='json' 序列化失败，尝试默认模式: {e}", flush=True)
+                try:
+                    # 使用默认模式，然后手动处理可能的问题字段
+                    room_data = room.model_dump()
+                    # 确保所有值都是 JSON 可序列化的
+                    import json as json_lib
+                    # 测试是否可以序列化
+                    json_lib.dumps(room_data, ensure_ascii=False, default=str)
+                    logger.info(f"【创建房间】房间数据序列化成功 (默认模式)")
+                    print(f"【创建房间】房间数据序列化成功 (默认模式)", flush=True)
+                except Exception as e2:
+                    logger.error(f"【创建房间错误】序列化失败: {e2}", exc_info=True)
+                    print(f"【创建房间错误】序列化失败: {e2}", flush=True)
+                    import traceback
+                    print(f"【创建房间错误】完整堆栈:\n{traceback.format_exc()}", flush=True)
+                    raise Exception(f"房间数据序列化失败: {str(e2)}") from e2
+            
+            # 保存到Redis
+            try:
+                logger.info(f"【创建房间】准备保存到Redis，房间ID: {room_id}")
+                print(f"【创建房间】准备保存到Redis，房间ID: {room_id}", flush=True)
+                print(f"【创建房间】房间数据大小: {len(str(room_data))} 字符", flush=True)
+                print(f"【创建房间】房间数据键: {list(room_data.keys()) if isinstance(room_data, dict) else 'N/A'}", flush=True)
+                
+                await redis_service.set_room_data(room_id, room_data)
+                
+                logger.info(f"【创建房间】Redis保存成功")
+                print(f"【创建房间】Redis保存成功", flush=True)
+            except Exception as e:
+                error_type = type(e).__name__
+                error_msg = str(e)
+                logger.error(f"【创建房间错误】Redis保存失败: {error_type}: {error_msg}", exc_info=True)
+                print(f"【创建房间错误】Redis保存失败: {error_type}: {error_msg}", flush=True)
+                import traceback
+                print(f"【创建房间错误】完整堆栈:\n{traceback.format_exc()}", flush=True)
+                raise Exception(f"保存房间到Redis失败: {error_type}: {error_msg}") from e
+            
+            logger.info(f"【创建房间】房间创建成功 - 房间ID: {room_id}")
+            print(f"【创建房间】房间创建成功 - 房间ID: {room_id}", flush=True)
+            
+            return room_id
+        except Exception as e:
+            logger.error(f"【创建房间错误】创建房间失败: {e}", exc_info=True)
+            print(f"【创建房间错误】创建房间失败: {e}", flush=True)
+            import traceback
+            traceback.print_exc()
+            raise
     
     async def join_room(self, room_id: str, user_id: str, username: str) -> bool:
         """加入房间"""
-        # 测试日志输出
-        logger.info(f"【测试日志】join_room 被调用 - 房间 {room_id}, 玩家 {username}")
-        print(f"【测试日志】join_room 被调用 - 房间 {room_id}, 玩家 {username}", flush=True)
-        
-        room_data = await redis_service.get_room_data(room_id)
-        if not room_data:
-            logger.warning(f"【加入房间失败】房间 {room_id} 不存在")
-            return False
-        
-        room = GameRoom(**room_data)
-        
-        # 检查是否已加入
-        if any(p.user_id == user_id for p in room.players):
-            logger.info(f"【玩家已存在】房间 {room_id} - 玩家 {username} (ID: {user_id}) 已在房间中")
+        try:
+            logger.info(f"【加入房间】开始 - 房间 {room_id}, 玩家 {username} (ID: {user_id})")
+            print(f"【加入房间】开始 - 房间 {room_id}, 玩家 {username} (ID: {user_id})", flush=True)
+            
+            room_data = await redis_service.get_room_data(room_id)
+            if not room_data:
+                logger.warning(f"【加入房间失败】房间 {room_id} 不存在")
+                print(f"【加入房间失败】房间 {room_id} 不存在", flush=True)
+                return False
+            
+            logger.info(f"【加入房间】从Redis获取房间数据成功")
+            print(f"【加入房间】从Redis获取房间数据成功", flush=True)
+            
+            room = GameRoom(**room_data)
+            
+            logger.info(f"【加入房间】房间对象创建成功，当前玩家数: {len(room.players)}")
+            print(f"【加入房间】房间对象创建成功，当前玩家数: {len(room.players)}", flush=True)
+            
+            # 检查是否已加入
+            if any(p.user_id == user_id for p in room.players):
+                logger.info(f"【玩家已存在】房间 {room_id} - 玩家 {username} (ID: {user_id}) 已在房间中")
+                print(f"【玩家已存在】房间 {room_id} - 玩家 {username} (ID: {user_id}) 已在房间中", flush=True)
+                return True
+            
+            # 检查房间是否已满（最多12人）
+            if len(room.players) >= 12:
+                logger.warning(f"【加入房间失败】房间 {room_id} 已满（当前 {len(room.players)}/12 人）")
+                print(f"【加入房间失败】房间 {room_id} 已满（当前 {len(room.players)}/12 人）", flush=True)
+                return False
+            
+            logger.info(f"【加入房间】创建玩家对象")
+            print(f"【加入房间】创建玩家对象", flush=True)
+            
+            player = Player(user_id=user_id, username=username, is_ai=False)
+            room.players.append(player)
+            
+            logger.info(f"【加入房间】保存房间数据到Redis")
+            print(f"【加入房间】保存房间数据到Redis", flush=True)
+            
+            await redis_service.set_room_data(room_id, room.model_dump())
+            
+            # 打印玩家加入日志
+            print(f"\n{'='*60}", flush=True)
+            print(f"【玩家加入游戏】房间 {room_id}", flush=True)
+            print(f"  玩家: {username} (ID: {user_id})", flush=True)
+            print(f"  当前房间人数: {len(room.players)}/12", flush=True)
+            print(f"{'='*60}\n", flush=True)
+            logger.info(f"\n{'='*60}")
+            logger.info(f"【玩家加入游戏】房间 {room_id}")
+            logger.info(f"  玩家: {username} (ID: {user_id})")
+            logger.info(f"  当前房间人数: {len(room.players)}/12")
+            logger.info(f"{'='*60}")
+            
             return True
-        
-        # 检查房间是否已满（最多12人）
-        if len(room.players) >= 12:
-            logger.warning(f"【加入房间失败】房间 {room_id} 已满（当前 {len(room.players)}/12 人）")
-            return False
-        
-        player = Player(user_id=user_id, username=username, is_ai=False)
-        room.players.append(player)
-        
-        await redis_service.set_room_data(room_id, room.dict())
-        
-        # 打印玩家加入日志
-        print(f"\n{'='*60}", flush=True)
-        print(f"【玩家加入游戏】房间 {room_id}", flush=True)
-        print(f"  玩家: {username} (ID: {user_id})", flush=True)
-        print(f"  当前房间人数: {len(room.players)}/12", flush=True)
-        print(f"{'='*60}\n", flush=True)
-        logger.info(f"\n{'='*60}")
-        logger.info(f"【玩家加入游戏】房间 {room_id}")
-        logger.info(f"  玩家: {username} (ID: {user_id})")
-        logger.info(f"  当前房间人数: {len(room.players)}/12")
-        logger.info(f"{'='*60}")
-        
-        return True
+        except Exception as e:
+            logger.error(f"【加入房间错误】加入房间异常 - 房间 {room_id}, 玩家 {username} (ID: {user_id}), 错误: {e}", exc_info=True)
+            print(f"【加入房间错误】加入房间异常 - 房间 {room_id}, 玩家 {username} (ID: {user_id}), 错误: {e}", flush=True)
+            import traceback
+            traceback.print_exc()
+            raise
     
     async def add_ai_player(self, room_id: str) -> bool:
         """添加AI玩家"""
@@ -190,7 +284,7 @@ class WerewolfService:
         ai_player = Player(user_id=ai_user_id, username=ai_name, is_ai=True)
         room.players.append(ai_player)
         
-        await redis_service.set_room_data(room_id, room.dict())
+        await redis_service.set_room_data(room_id, room.model_dump())
         
         # 打印AI玩家加入日志
         print(f"【AI玩家加入】房间 {room_id} - {ai_name} (ID: {ai_user_id})，当前房间人数: {len(room.players)}/12", flush=True)
@@ -348,7 +442,7 @@ class WerewolfService:
                         logger.warning(f"发送私有消息失败 (房间 {room_id}, 用户 {player.user_id}): {e}")
             
             # 保存房间状态
-            await redis_service.set_room_data(room_id, room.dict())
+            await redis_service.set_room_data(room_id, room.model_dump())
             
             # AI主持人宣布开始
             await self._ai_announce(room_id, "游戏开始！身份已分配，请查看你的身份信息。")
@@ -390,7 +484,7 @@ class WerewolfService:
         room.phase_start_time = time.time()
         room.phase_duration = self.PHASE_DURATIONS.get(room.phase)
         room.can_speak = self.PHASE_CAN_SPEAK.get(room.phase, False)
-        await redis_service.set_room_data(room.room_id, room.dict())
+        await redis_service.set_room_data(room.room_id, room.model_dump())
     
     async def _check_phase_timeout(self, room: GameRoom):
         """检查阶段是否超时，如果超时则自动进入下一阶段"""
@@ -447,7 +541,7 @@ class WerewolfService:
                     import json
                     await self.broadcast_callback(json.dumps({
                         "type": "room_update",
-                        "room": room.dict()
+                        "room": room.model_dump()
                     }), f"werewolf_{room.room_id}")
                 
                 await self._ai_announce(room.room_id, "讨论时间结束，进入投票阶段。")
@@ -680,7 +774,7 @@ class WerewolfService:
         
         logger.info(f"【投票】房间 {room.room_id} - 玩家 {player.username} (ID: {player.user_id}, 角色: {self._get_role_name(player.role) if player.role else '未知'}) 投票给: {target_player.username} (ID: {target})")
         
-        await redis_service.set_room_data(room.room_id, room.dict())
+        await redis_service.set_room_data(room.room_id, room.model_dump())
         
         # 注意：不在所有人投票后立即处理投票结果
         # 投票结果只应该在投票阶段结束时处理（通过超时机制）
@@ -706,7 +800,7 @@ class WerewolfService:
             await self._set_phase_time(room)
             await self._ai_announce(room.room_id, "游戏结束！狼人阵营获胜！")
         
-        await redis_service.set_room_data(room.room_id, room.dict())
+        await redis_service.set_room_data(room.room_id, room.model_dump())
     
     async def _ai_announce(self, room_id: str, message: str, phase_popup: Optional[str] = None, broadcast_callback=None):
         """AI主持人宣布
@@ -1264,7 +1358,7 @@ class WerewolfService:
                 player.guard_target = None
         
         # 先保存房间状态，确保night_count被正确保存
-        await redis_service.set_room_data(room_id, room.dict())
+        await redis_service.set_room_data(room_id, room.model_dump())
         
         await self._set_phase_time(room)
         
@@ -1273,7 +1367,7 @@ class WerewolfService:
             import json
             await self.broadcast_callback(json.dumps({
                 "type": "room_update",
-                "room": room.dict()
+                "room": room.model_dump()
             }), f"werewolf_{room_id}")
         
         # 发送夜晚开始提示和弹窗
@@ -1374,7 +1468,7 @@ class WerewolfService:
         if room_data:
             final_room = GameRoom(**room_data)
             final_room.current_night_phase = None
-            await redis_service.set_room_data(room.room_id, final_room.dict())
+            await redis_service.set_room_data(room.room_id, final_room.model_dump())
         
         # 检查是否所有行动都完成了，如果完成则结算
         await self._check_night_actions_complete(room)
@@ -1389,14 +1483,14 @@ class WerewolfService:
         print(f"【守卫阶段开始】房间 {room.room_id} - 守卫 {guard.username} (ID: {guard.user_id})", flush=True)
         logger.info(f"【守卫阶段开始】房间 {room.room_id} - 守卫 {guard.username} (ID: {guard.user_id})")
         room.current_night_phase = "guard"
-        await redis_service.set_room_data(room.room_id, room.dict())
+        await redis_service.set_room_data(room.room_id, room.model_dump())
         
         # 广播房间状态更新
         if self.broadcast_callback:
             import json
             await self.broadcast_callback(json.dumps({
                 "type": "room_update",
-                "room": room.dict()
+                "room": room.model_dump()
             }), f"werewolf_{room.room_id}")
         
         # AI主持人公开提示
@@ -1455,14 +1549,14 @@ class WerewolfService:
         print(f"【狼人阶段开始】房间 {room.room_id} - 存活狼人: {', '.join(wolf_names)} (共 {len(wolves)} 人)", flush=True)
         logger.info(f"【狼人阶段开始】房间 {room.room_id} - 存活狼人: {', '.join(wolf_names)} (共 {len(wolves)} 人)")
         room.current_night_phase = "wolf"
-        await redis_service.set_room_data(room.room_id, room.dict())
+        await redis_service.set_room_data(room.room_id, room.model_dump())
         
         # 广播房间状态更新
         if self.broadcast_callback:
             import json
             await self.broadcast_callback(json.dumps({
                 "type": "room_update",
-                "room": room.dict()
+                "room": room.model_dump()
             }), f"werewolf_{room.room_id}")
         
         # AI主持人公开提示
@@ -1512,14 +1606,14 @@ class WerewolfService:
         print(f"【预言家阶段开始】房间 {room.room_id} - 预言家 {seer.username} (ID: {seer.user_id})", flush=True)
         logger.info(f"【预言家阶段开始】房间 {room.room_id} - 预言家 {seer.username} (ID: {seer.user_id})")
         room.current_night_phase = "seer"
-        await redis_service.set_room_data(room.room_id, room.dict())
+        await redis_service.set_room_data(room.room_id, room.model_dump())
         
         # 广播房间状态更新
         if self.broadcast_callback:
             import json
             await self.broadcast_callback(json.dumps({
                 "type": "room_update",
-                "room": room.dict()
+                "room": room.model_dump()
             }), f"werewolf_{room.room_id}")
         
         # AI主持人公开提示
@@ -1562,14 +1656,14 @@ class WerewolfService:
         print(f"【女巫阶段开始】房间 {room.room_id} - 女巫 {witch.username} (ID: {witch.user_id})", flush=True)
         logger.info(f"【女巫阶段开始】房间 {room.room_id} - 女巫 {witch.username} (ID: {witch.user_id})")
         room.current_night_phase = "witch"
-        await redis_service.set_room_data(room.room_id, room.dict())
+        await redis_service.set_room_data(room.room_id, room.model_dump())
         
         # 广播房间状态更新
         if self.broadcast_callback:
             import json
             await self.broadcast_callback(json.dumps({
                 "type": "room_update",
-                "room": room.dict()
+                "room": room.model_dump()
             }), f"werewolf_{room.room_id}")
         
         # AI主持人公开提示
@@ -1667,7 +1761,7 @@ class WerewolfService:
         player.guard_target = target
         player.last_guard_target = target
         
-        await redis_service.set_room_data(room.room_id, room.dict())
+        await redis_service.set_room_data(room.room_id, room.model_dump())
         
         # 打印守卫行动日志（强制刷新输出）
         print(f"【守卫行动】房间 {room.room_id} - 守卫 {player.username} 选择守护: {target_player.username} (ID: {target})", flush=True)
@@ -1759,7 +1853,7 @@ class WerewolfService:
             logger.info(f"【狼人投票完成】房间 {room.room_id} - 所有狼人已投票，最终击杀目标: {final_target_name} (ID: {final_target})")
             logger.info(f"  投票详情: {vote_counts}")
         
-        await redis_service.set_room_data(room.room_id, room.dict())
+        await redis_service.set_room_data(room.room_id, room.model_dump())
         
         target_name = target_player.username
         await redis_service.add_private_message(
@@ -1869,7 +1963,7 @@ class WerewolfService:
         print(f"【预言家行动】房间 {room.room_id} - 预言家 {player.username} 查验 {target_player.username}，结果: {result}", flush=True)
         logger.info(f"【预言家行动】房间 {room.room_id} - 预言家 {player.username} 查验 {target_player.username}，结果: {result}")
         
-        await redis_service.set_room_data(room.room_id, room.dict())
+        await redis_service.set_room_data(room.room_id, room.model_dump())
         
         # 构建私密消息
         private_msg = {
@@ -1960,7 +2054,7 @@ class WerewolfService:
             print(f"【女巫行动】房间 {room.room_id} - 女巫 {player.username} 使用解药救了: {saved_name} (ID: {wolf_target})", flush=True)
             logger.info(f"【女巫行动】房间 {room.room_id} - 女巫 {player.username} 使用解药救了: {saved_name} (ID: {wolf_target})")
             
-            await redis_service.set_room_data(room.room_id, room.dict())
+            await redis_service.set_room_data(room.room_id, room.model_dump())
             
             await redis_service.add_private_message(
                 room.room_id, player.user_id,
@@ -1994,7 +2088,7 @@ class WerewolfService:
             print(f"【女巫行动】房间 {room.room_id} - 女巫 {player.username} 使用毒药毒杀了: {target_player.username} (ID: {target})", flush=True)
             logger.info(f"【女巫行动】房间 {room.room_id} - 女巫 {player.username} 使用毒药毒杀了: {target_player.username} (ID: {target})")
             
-            await redis_service.set_room_data(room.room_id, room.dict())
+            await redis_service.set_room_data(room.room_id, room.model_dump())
             
             await redis_service.add_private_message(
                 room.room_id, player.user_id,
@@ -2015,7 +2109,7 @@ class WerewolfService:
             print(f"【女巫行动】房间 {room.room_id} - 女巫 {player.username} 选择不使用任何药水", flush=True)
             logger.info(f"【女巫行动】房间 {room.room_id} - 女巫 {player.username} 选择不使用任何药水")
             
-            await redis_service.set_room_data(room.room_id, room.dict())
+            await redis_service.set_room_data(room.room_id, room.model_dump())
             
             await redis_service.add_private_message(
                 room.room_id, player.user_id,
@@ -2274,7 +2368,7 @@ class WerewolfService:
             logger.info(f"{'='*60}\n")
             
             # 保存房间状态（确保死亡状态被正确保存）
-            await redis_service.set_room_data(room.room_id, room.dict())
+            await redis_service.set_room_data(room.room_id, room.model_dump())
             
             # 再次验证死亡状态是否已正确保存
             room_data_check = await redis_service.get_room_data(room.room_id)
@@ -2302,7 +2396,7 @@ class WerewolfService:
                             if dead_player_check.alive:
                                 logger.warning(f"【警告】玩家 {dead_player_check.username} (ID: {death_id}) 的死亡状态未正确保存，强制更新")
                                 dead_player_check.alive = False
-                                await redis_service.set_room_data(room.room_id, check_room.dict())
+                                await redis_service.set_room_data(room.room_id, check_room.model_dump())
                 
                 # 额外检查：确保没有不在deaths列表中的玩家被错误地标记为死亡
                 for player in check_room.players:
@@ -2373,7 +2467,7 @@ class WerewolfService:
             import json
             await self.broadcast_callback(json.dumps({
                 "type": "room_update",
-                "room": room.dict()
+                "room": room.model_dump()
             }), f"werewolf_{room.room_id}")
         
         # 显示白天到来弹窗
@@ -2581,7 +2675,7 @@ class WerewolfService:
         # 设置阶段为淘汰阶段，等待猎人开枪
         room.phase = GamePhase.ELIMINATION
         await self._set_phase_time(room)
-        await redis_service.set_room_data(room.room_id, room.dict())
+        await redis_service.set_room_data(room.room_id, room.model_dump())
         
         # 如果是AI猎人，自动选择目标并开枪
         if hunter.is_ai:
@@ -2628,7 +2722,7 @@ class WerewolfService:
             target_player.died_by = 'hunter'
             player.hunter_shot_used = True
             
-            await redis_service.set_room_data(room.room_id, room.dict())
+            await redis_service.set_room_data(room.room_id, room.model_dump())
             
             await self._ai_announce(room.room_id, f"{player.username} 开枪带走了 {target_player.username}！")
             
@@ -2642,7 +2736,7 @@ class WerewolfService:
             if room.phase != GamePhase.GAME_OVER:
                 room.phase = GamePhase.DAY
                 await self._set_phase_time(room)
-                await redis_service.set_room_data(room.room_id, room.dict())
+                await redis_service.set_room_data(room.room_id, room.model_dump())
                 await self._ai_announce(room.room_id, "请继续发言讨论。")
             
             return {"success": True, "message": f"你开枪带走了 {target_player.username}"}
@@ -2744,7 +2838,7 @@ class WerewolfService:
         logger.info(f"  详细投票统计: {vote_details}")
         
         # 保存房间状态（使用current_room）
-        await redis_service.set_room_data(current_room.room_id, current_room.dict())
+        await redis_service.set_room_data(current_room.room_id, current_room.model_dump())
         
         # 处理遗言
         await self._handle_last_words(current_room, eliminated_player)
@@ -2787,7 +2881,7 @@ class WerewolfService:
             await self._set_phase_time(room)
             await self._ai_announce(room.room_id, "游戏结束！好人阵营获胜！")
         
-        await redis_service.set_room_data(room.room_id, room.dict())
+        await redis_service.set_room_data(room.room_id, room.model_dump())
 
 werewolf_service = WerewolfService()
 

@@ -103,7 +103,7 @@ class CharacterService:
     async def save_character_memory(self, memory: CharacterMemory):
         """保存角色对话记忆"""
         key = f"character_memory:{memory.user_id}:{memory.character_id}"
-        await redis_service.set(key, memory.dict(), ex=86400 * 7)  # 7天过期
+        await redis_service.set(key, memory.model_dump(), ex=86400 * 7)  # 7天过期
 
 character_service = CharacterService()
 
