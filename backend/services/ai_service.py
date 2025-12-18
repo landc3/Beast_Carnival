@@ -106,6 +106,7 @@ class AIService:
     def build_mystery_prompt(event: Dict, found_clues: List[str]) -> str:
         """构建解谜事件的prompt"""
         background = event.get("background", "")
+        solution = event.get("solution", "")
         clues_text = "\n".join([f"- {clue}" for clue in found_clues])
         
         return f"""你是一个解谜游戏的叙事者。
@@ -116,11 +117,21 @@ class AIService:
 【已发现的线索】
 {clues_text if found_clues else "暂无线索"}
 
-【任务】
-1. 根据玩家的提问和推理，逐步提供线索
+【固定答案（仅你可见，不要直接告诉玩家）】
+{solution}
+
+【重要任务】
+1. 根据玩家的提问和推理，逐步提供线索，引导玩家思考
 2. 每次最多提供1个新线索
-3. 当玩家接近真相时，给予提示
-4. 当玩家完全解开谜题时，宣布成功
+3. 当玩家接近真相时，给予提示和鼓励，但不要直接说出答案
+4. 当玩家说出正确答案或接近正确答案时（包含关键要素：{solution}），给予肯定并宣布成功
+5. 如果玩家的推理方向错误，要温和地引导他们回到正确的方向
+6. 你的目标是引导玩家自己推理出固定答案，而不是直接告诉他们
+
+【引导策略】
+- 当玩家提到关键要素时（如"狐狸"、"偷走"、"暗恋"、"约会"等），给予积极反馈
+- 如果玩家偏离主题，通过线索提示引导他们回到正确的推理方向
+- 保持神秘感和探索感，让玩家有成就感
 
 现在开始解谜吧！"""
     

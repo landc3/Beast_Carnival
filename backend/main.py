@@ -384,16 +384,40 @@ async def event_chat(websocket: WebSocket, user_id: str, event_id: str):
             # 保存进度
             await event_service.save_event_progress(user_id, event_id, progress)
             
-            # 检查是否完成
-            if len(progress["found_clues"]) >= len(event["clues"]) and not progress["completed"]:
-                await event_service.complete_event(user_id, event_id)
-                ai_response += "\n\n🎉 恭喜！你解开了谜题！"
+            # 检查是否完成：需要找到所有线索 AND 玩家说出正确答案
+            event_completed = False
+            unlocked_characters = []
+            
+            if not progress["completed"]:
+                has_all_clues = len(progress["found_clues"]) >= len(event["clues"])
+                solution_matched = event_service.check_solution_match(event_id, user_message)
+                
+                if has_all_clues and solution_matched:
+                    await event_service.complete_event(user_id, event_id)
+                    event_completed = True
+                    ai_response += "\n\n🎉 恭喜！你解开了谜题！真相是：" + event.get("solution", "")
+                    
+                    # 检查并解锁符合条件的角色
+                    unlocked_characters = await character_service.check_and_unlock_characters(user_id)
+                elif solution_matched and not has_all_clues:
+                    # 玩家说出了答案但还没找到所有线索，给予提示
+                    ai_response += "\n\n💡 你的推理方向很接近了！但还需要更多线索来确认。继续调查吧！"
             
             # 发送回复
-            await websocket.send_text(json.dumps({
+            response_data = {
                 "type": "message",
                 "content": ai_response
-            }))
+            }
+            
+            # 如果事件完成，添加完成标记
+            if event_completed:
+                response_data["event_completed"] = True
+            
+            # 如果有解锁的角色，添加解锁信息
+            if unlocked_characters:
+                response_data["unlocked_characters"] = unlocked_characters
+            
+            await websocket.send_text(json.dumps(response_data))
     
     except WebSocketDisconnect:
         manager.disconnect(websocket, f"event_{user_id}_{event_id}")
