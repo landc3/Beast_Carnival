@@ -219,7 +219,7 @@ export default {
       console.log('显示事件完成弹窗')
       eventCompletedModal.value = {
         show: true,
-        message: '你太棒了！完成了第一个大事件！'
+        message: '你太棒了！完成了一个大事件！'
       }
     }
     

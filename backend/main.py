@@ -330,6 +330,33 @@ async def get_user_events(user_id: str):
     events = await event_service.get_user_events(user_id)
     return {"events": events}
 
+@app.post("/api/event/{event_id}/submit-answer")
+async def submit_answer(event_id: str, user_id: str, answer1: str, answer2: str):
+    """提交答案（用于嘎嘎事件等需要两个答案的事件）"""
+    event = event_service.get_event(event_id)
+    if not event:
+        return {"error": "事件不存在", "correct": False}
+    
+    # 合并两个答案进行匹配
+    combined_answer = f"{answer1} {answer2}"
+    is_correct = event_service.check_solution_match(event_id, combined_answer)
+    
+    if is_correct:
+        # 标记事件为完成
+        await event_service.complete_event(user_id, event_id)
+        # 检查并解锁符合条件的角色
+        unlocked_characters = await character_service.check_and_unlock_characters(user_id)
+        return {
+            "correct": True,
+            "solution": event.get("solution", ""),
+            "unlocked_characters": unlocked_characters
+        }
+    else:
+        return {
+            "correct": False,
+            "hint": "再想想…提示：注意那只小海龟的作用。"
+        }
+
 @app.websocket("/ws/event/{user_id}/{event_id}")
 async def event_chat(websocket: WebSocket, user_id: str, event_id: str):
     """大事件解谜WebSocket"""

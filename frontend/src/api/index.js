@@ -16,6 +16,10 @@ export const unlockCharacter = (userId, characterId) =>
 
 // 事件
 export const getUserEvents = (userId) => api.get(`/user/${userId}/events`)
+export const submitAnswer = (eventId, userId, answer1, answer2) => 
+  api.post(`/event/${eventId}/submit-answer`, null, { 
+    params: { user_id: userId, answer1, answer2 } 
+  })
 
 // 狼人杀
 export const createWerewolfRoom = () => api.post('/werewolf/room')

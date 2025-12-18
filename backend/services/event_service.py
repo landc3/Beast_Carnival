@@ -118,14 +118,18 @@ class EventService:
             matched_groups = sum(1 for group in key_terms if any(term in user_message_lower for term in group))
             return matched_groups >= 2
         elif event_id == "event_duck_mystery":
-            # "池塘的秘密"事件
-            key_terms = [
-                ["工厂", "污染", "污水"],
-                ["排放", "偷偷"],
-                ["证据", "收集"]
-            ]
-            matched_groups = sum(1 for group in key_terms if any(term in user_message_lower for term in group))
-            return matched_groups >= 2
+            # "失踪的钻石项链"事件
+            # 需要同时匹配两个问题的答案：
+            # 1. 谁是真正的盗窃犯？需要包含"助理"或"私人助理"
+            # 2. 他是如何作案的？需要包含"录音"、"听密码"、"海龟"、"录音设备"中的任意一个
+            question1_keywords = ["助理", "私人助理"]
+            question2_keywords = ["录音", "听密码", "海龟", "录音设备", "微型录音", "录下", "密码声音", "破解密码", "声音", "设备"]
+            
+            has_question1_answer = any(keyword in user_message_lower for keyword in question1_keywords)
+            has_question2_answer = any(keyword in user_message_lower for keyword in question2_keywords)
+            
+            # 两个问题的答案都必须匹配
+            return has_question1_answer and has_question2_answer
         else:
             # 对于其他事件，使用更通用的匹配逻辑
             import re
