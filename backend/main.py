@@ -27,7 +27,7 @@ for handler in root_logger.handlers[:]:
 # 配置基础日志
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    format='%(asctime)s - %(message)s',
     datefmt='%Y-%m-%d %H:%M:%S',
     force=True,  # 强制重新配置，避免被其他配置覆盖
     handlers=[
@@ -56,22 +56,8 @@ for module_name in ['services.werewolf_service', 'services.ai_service', 'service
     module_logger.propagate = True  # 允许向上传播，确保日志能输出
 
 logger = logging.getLogger(__name__)
-# 启动信息将在 startup_event 中统一输出，避免重复
-
-# 在应用创建时立即输出，确保模块已加载
-print("=" * 60, flush=True)
-print("【模块加载】main.py 模块正在加载...", flush=True)
-print("=" * 60, flush=True)
-sys.stdout.write("=" * 60 + "\n")
-sys.stdout.write("【模块加载】main.py 模块正在加载...\n")
-sys.stdout.write("=" * 60 + "\n")
-sys.stdout.flush()
 
 app = FastAPI(title="Beast Carnival API")
-
-print("【模块加载】FastAPI 应用对象已创建", flush=True)
-sys.stdout.write("【模块加载】FastAPI 应用对象已创建\n")
-sys.stdout.flush()
 
 # 全局异常处理器
 @app.exception_handler(Exception)
@@ -80,14 +66,6 @@ async def global_exception_handler(request: Request, exc: Exception):
     error_type = type(exc).__name__
     error_msg = str(exc)
     error_trace = traceback.format_exc()
-    
-    # 强制输出错误信息
-    print("=" * 60, flush=True)
-    print(f"【全局异常】{request.method} {request.url.path}", flush=True)
-    print(f"错误类型: {error_type}", flush=True)
-    print(f"错误信息: {error_msg}", flush=True)
-    print(f"错误堆栈:\n{error_trace}", flush=True)
-    print("=" * 60, flush=True)
     
     logger.error(f"【全局异常】{request.method} {request.url.path} - {error_type}: {error_msg}", exc_info=True)
     
@@ -110,55 +88,18 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 请求日志中间件 - 后添加，所以会先执行
+# 请求日志中间件 - 只记录错误，不记录正常请求
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
-    """记录所有HTTP请求和响应"""
-    start_time = time.time()
-    
-    # 强制输出请求信息，确保能看到
-    request_info = f"【请求】{request.method} {request.url.path}"
-    if request.url.query:
-        request_info += f"?{request.url.query}"
-    
-    # 使用多种方式输出，确保能看到
-    sys.stdout.write("=" * 60 + "\n")
-    sys.stdout.write(request_info + "\n")
-    sys.stdout.write("=" * 60 + "\n")
-    sys.stdout.flush()
-    print("=" * 60, flush=True)
-    print(request_info, flush=True)
-    print("=" * 60, flush=True)
-    logger.info(request_info)
-    
+    """只记录HTTP请求错误，不记录正常请求"""
     try:
         response = await call_next(request)
-        process_time = time.time() - start_time
-        
-        # 记录响应
-        response_info = f"【响应】{request.method} {request.url.path} - 状态码: {response.status_code} - 耗时: {process_time:.3f}s"
-        print(response_info, flush=True)
-        sys.stdout.write(response_info + "\n")
-        sys.stdout.flush()
-        logger.info(response_info)
-        
         return response
     except Exception as e:
-        process_time = time.time() - start_time
-        error_msg = f"【请求异常】{request.method} {request.url.path} - 错误: {str(e)} - 耗时: {process_time:.3f}s"
+        error_msg = f"【请求异常】{request.method} {request.url.path} - 错误: {str(e)}"
         error_trace = traceback.format_exc()
         
-        # 强制输出错误信息
-        print("=" * 60, flush=True)
-        print(error_msg, flush=True)
-        print(f"错误堆栈:\n{error_trace}", flush=True)
-        print("=" * 60, flush=True)
-        sys.stdout.write("=" * 60 + "\n")
-        sys.stdout.write(error_msg + "\n")
-        sys.stdout.write(f"错误堆栈:\n{error_trace}\n")
-        sys.stdout.write("=" * 60 + "\n")
-        sys.stdout.flush()
-        
+        # 只记录错误信息
         logger.error(error_msg, exc_info=True)
         
         # 返回500错误响应
@@ -214,26 +155,14 @@ manager = ConnectionManager()
 async def startup_event():
     """服务器启动时的初始化"""
     try:
-        print("=" * 60, flush=True)
-        print("【启动事件】FastAPI 应用启动中...", flush=True)
-        print("=" * 60, flush=True)
-        sys.stdout.write("=" * 60 + "\n")
-        sys.stdout.write("【启动事件】FastAPI 应用启动中...\n")
-        sys.stdout.write("=" * 60 + "\n")
-        sys.stdout.flush()
-        
         logger.info(f"后端服务已启动，监听地址: http://{config.HOST}:{config.PORT}")
         logger.info(f"API文档: http://{config.HOST}:{config.PORT}/docs")
-        print(f"后端服务已启动，监听地址: http://{config.HOST}:{config.PORT}", flush=True)
-        print(f"API文档: http://{config.HOST}:{config.PORT}/docs", flush=True)
         # 测试Redis连接
         try:
-            # 直接使用同步ping，Redis操作很快
             redis_service.redis_client.ping()
             logger.info("✓ Redis连接正常")
         except Exception as e:
             logger.warning(f"⚠ Redis连接测试失败: {e}")
-        logger.info("=" * 60)
     except Exception as e:
         logger.error(f"启动事件处理失败: {e}", exc_info=True)
 
@@ -467,33 +396,16 @@ async def root():
 @app.get("/health")
 async def health_check():
     """健康检查端点"""
-    print("=" * 60, flush=True)
-    print("【健康检查】收到 GET /health 请求", flush=True)
-    print("=" * 60, flush=True)
     return {"status": "healthy", "service": "Beast Carnival API"}
 
 @app.get("/api/test")
 async def test_endpoint():
     """测试端点，验证请求是否能到达后端"""
-    print("=" * 60, flush=True)
-    print("【测试端点】收到 GET /api/test 请求", flush=True)
-    print("=" * 60, flush=True)
-    sys.stdout.write("=" * 60 + "\n")
-    sys.stdout.write("【测试端点】收到 GET /api/test 请求\n")
-    sys.stdout.write("=" * 60 + "\n")
-    sys.stdout.flush()
     return {"status": "ok", "message": "后端正常工作"}
 
 @app.post("/api/test")
 async def test_post_endpoint():
     """测试 POST 端点"""
-    print("=" * 60, flush=True)
-    print("【测试端点】收到 POST /api/test 请求", flush=True)
-    print("=" * 60, flush=True)
-    sys.stdout.write("=" * 60 + "\n")
-    sys.stdout.write("【测试端点】收到 POST /api/test 请求\n")
-    sys.stdout.write("=" * 60 + "\n")
-    sys.stdout.flush()
     return {"status": "ok", "message": "POST 请求正常工作"}
 
 # ==================== 狼人杀游戏 ====================
@@ -501,47 +413,15 @@ async def test_post_endpoint():
 @app.post("/api/werewolf/room")
 async def create_werewolf_room():
     """创建狼人杀房间"""
-    # 强制输出，确保能看到请求 - 使用多种方式
-    sys.stdout.write("=" * 60 + "\n")
-    sys.stdout.write("【API路由】收到创建房间请求\n")
-    sys.stdout.write("=" * 60 + "\n")
-    sys.stdout.flush()
-    print("=" * 60, flush=True)
-    print("【API路由】收到创建房间请求", flush=True)
-    print("=" * 60, flush=True)
-    
     try:
-        logger.info(f"【API调用】创建房间 - 开始")
-        print(f"【API调用】创建房间 - 开始", flush=True)
-        sys.stdout.write("【API调用】创建房间 - 开始\n")
-        sys.stdout.flush()
-        
         room_id = await werewolf_service.create_room()
-        
-        logger.info(f"【API调用】创建房间成功 - 房间ID: {room_id}")
-        print(f"【API调用】创建房间成功 - 房间ID: {room_id}", flush=True)
-        
+        logger.info(f"创建房间成功 - 房间ID: {room_id}")
         return {"room_id": room_id}
     except HTTPException:
-        # 重新抛出HTTPException，不记录为错误
         raise
     except Exception as e:
         error_detail = f"创建房间失败: {str(e)}"
-        error_trace = traceback.format_exc()
-        error_type = type(e).__name__
-        
-        # 强制输出错误信息到控制台
-        print("=" * 60, flush=True)
-        print(f"【API错误】创建房间失败!", flush=True)
-        print(f"错误类型: {error_type}", flush=True)
-        print(f"错误信息: {error_detail}", flush=True)
-        print(f"完整堆栈:\n{error_trace}", flush=True)
-        print("=" * 60, flush=True)
-        
-        # 同时使用 logger
-        logger.error(f"【API错误】创建房间失败: {error_type}: {error_detail}")
-        logger.error(f"【错误堆栈】\n{error_trace}")
-        
+        logger.error(f"创建房间失败: {error_detail}", exc_info=True)
         raise HTTPException(status_code=500, detail=error_detail)
 
 @app.post("/api/werewolf/room/{room_id}/join")

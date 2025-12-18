@@ -144,7 +144,7 @@ if __name__ == "__main__":
     # 这很重要，因为 reload=True 时可能会重新加载模块
     logging.basicConfig(
         level=logging.INFO,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        format='%(asctime)s - %(message)s',
         datefmt='%Y-%m-%d %H:%M:%S',
         force=True,
         handlers=[
@@ -175,7 +175,7 @@ if __name__ == "__main__":
                 "fmt": '%(client_addr)s "%(request_line)s" %(status_code)s',
             },
             "detailed": {
-                "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+                "format": "%(asctime)s - %(message)s",
                 "datefmt": "%Y-%m-%d %H:%M:%S",
             },
         },
@@ -199,15 +199,15 @@ if __name__ == "__main__":
         "loggers": {
             "uvicorn": {"handlers": ["default"], "level": "INFO", "propagate": False},
             "uvicorn.error": {"handlers": ["default"], "level": "INFO", "propagate": False},
-            "uvicorn.access": {"handlers": ["access"], "level": "INFO", "propagate": False},
+            "uvicorn.access": {"handlers": [], "level": "INFO", "propagate": False},  # 禁用访问日志输出
             # 添加其他模块的 logger 配置，确保日志能输出
             # 允许 propagate=True，确保日志能输出到根 logger
-            "services.werewolf_service": {"handlers": ["detailed"], "level": "INFO", "propagate": True},
-            "services.ai_service": {"handlers": ["detailed"], "level": "INFO", "propagate": True},
-            "services.redis_service": {"handlers": ["detailed"], "level": "INFO", "propagate": True},
-            "services.character_service": {"handlers": ["detailed"], "level": "INFO", "propagate": True},
-            "services.event_service": {"handlers": ["detailed"], "level": "INFO", "propagate": True},
-            "main": {"handlers": ["detailed"], "level": "INFO", "propagate": True},
+            "services.werewolf_service": {"handlers": [], "level": "INFO", "propagate": True},
+            "services.ai_service": {"handlers": [], "level": "INFO", "propagate": True},
+            "services.redis_service": {"handlers": [], "level": "INFO", "propagate": True},
+            "services.character_service": {"handlers": [], "level": "INFO", "propagate": True},
+            "services.event_service": {"handlers": [], "level": "INFO", "propagate": True},
+            "main": {"handlers": [], "level": "INFO", "propagate": True},
         },
         "root": {
             "handlers": ["detailed"],
@@ -221,7 +221,7 @@ if __name__ == "__main__":
         port=config.PORT,
         reload=True,
         log_level="info",
-        access_log=True,  # 确保访问日志启用
+        access_log=False,  # 禁用访问日志，减少冗余输出
         log_config=log_config  # 使用自定义日志配置
     )
 

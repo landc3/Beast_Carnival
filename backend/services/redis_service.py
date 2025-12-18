@@ -43,29 +43,19 @@ class RedisService:
     def _set_sync(self, key: str, value: str, ex: Optional[int] = None):
         """同步设置键值 - 内部方法"""
         try:
-            print(f"[Redis同步] 执行 set: key={key}, value_len={len(value) if value else 0}, ex={ex}", flush=True)
             if ex is not None and ex > 0:
                 result = self.redis_client.set(key, value, ex=ex)
-                print(f"[Redis同步] set 成功 (带过期时间): {result}", flush=True)
                 return result
             else:
                 result = self.redis_client.set(key, value)
-                print(f"[Redis同步] set 成功 (无过期时间): {result}", flush=True)
                 return result
         except Exception as e:
-            print(f"[Redis同步错误] set 失败: {type(e).__name__}: {e}", flush=True)
-            import traceback
-            traceback.print_exc()
             # 如果带 ex 参数失败，尝试不带参数
             if ex is not None:
                 try:
-                    print(f"[Redis同步] 尝试不带过期时间重试", flush=True)
                     result = self.redis_client.set(key, value)
-                    print(f"[Redis同步] 重试成功: {result}", flush=True)
                     return result
                 except Exception as retry_e:
-                    print(f"[Redis同步错误] 重试也失败: {type(retry_e).__name__}: {retry_e}", flush=True)
-                    traceback.print_exc()
                     raise retry_e
             raise e
     
@@ -84,92 +74,48 @@ class RedisService:
     async def set(self, key: str, value: Any, ex: Optional[int] = None):
         """设置键值 - 使用线程池执行同步操作"""
         try:
-            print(f"[Redis] 开始设置键: {key}, ex={ex}", flush=True)
-            sys.stdout.write(f"[Redis] 开始设置键: {key}, ex={ex}\n")
-            sys.stdout.flush()
-            
             # 先序列化数据
             if isinstance(value, (dict, list)):
-                print(f"[Redis] 序列化数据，类型: {type(value)}", flush=True)
-                sys.stdout.write(f"[Redis] 序列化数据，类型: {type(value)}\n")
-                sys.stdout.flush()
                 value = json.dumps(value, ensure_ascii=False, default=str)
-                print(f"[Redis] 序列化完成，长度: {len(value)}", flush=True)
-                sys.stdout.write(f"[Redis] 序列化完成，长度: {len(value)}\n")
-                sys.stdout.flush()
             
             # 使用线程池执行同步操作，避免阻塞事件循环
-            # 在 Windows 上，直接使用 run_in_executor 更稳定
             try:
                 loop = asyncio.get_running_loop()
             except RuntimeError:
                 loop = asyncio.get_event_loop()
             
-            print(f"[Redis] 准备执行 set 操作", flush=True)
-            sys.stdout.write(f"[Redis] 准备执行 set 操作\n")
-            sys.stdout.flush()
-            
             # 统一使用 run_in_executor，避免 asyncio.to_thread 在 Windows 上的兼容性问题
             if ex is not None and ex > 0:
-                print(f"[Redis] 使用过期时间: {ex}秒", flush=True)
-                sys.stdout.write(f"[Redis] 使用过期时间: {ex}秒\n")
-                sys.stdout.flush()
                 set_func = partial(self._set_sync, key, value, ex)
             else:
-                print(f"[Redis] 不使用过期时间", flush=True)
-                sys.stdout.write(f"[Redis] 不使用过期时间\n")
-                sys.stdout.flush()
                 set_func = partial(self._set_sync, key, value)
             
             # 直接使用 run_in_executor，在所有平台上都稳定
-            print(f"[Redis] 调用 run_in_executor 执行 set 操作", flush=True)
-            sys.stdout.write(f"[Redis] 调用 run_in_executor 执行 set 操作\n")
-            sys.stdout.flush()
             try:
                 # 添加超时保护，避免无限等待
                 result = await asyncio.wait_for(
                     loop.run_in_executor(_executor, set_func),
                     timeout=5.0  # 5秒超时
                 )
-                print(f"[Redis] run_in_executor 执行完成，结果: {result}", flush=True)
-                sys.stdout.write(f"[Redis] run_in_executor 执行完成，结果: {result}\n")
-                sys.stdout.flush()
             except asyncio.TimeoutError:
-                error_msg = "[Redis错误] run_in_executor 执行超时（超过5秒）"
-                print(error_msg, flush=True)
-                sys.stdout.write(error_msg + "\n")
-                sys.stdout.flush()
                 raise Exception("Redis操作超时") from None
             except Exception as executor_error:
-                print(f"[Redis错误] run_in_executor 执行失败: {type(executor_error).__name__}: {executor_error}", flush=True)
-                sys.stdout.write(f"[Redis错误] run_in_executor 执行失败: {type(executor_error).__name__}: {executor_error}\n")
-                sys.stdout.flush()
                 import traceback
                 error_trace = traceback.format_exc()
-                print(f"[Redis错误] 执行器错误堆栈:\n{error_trace}", flush=True)
-                sys.stdout.write(f"[Redis错误] 执行器错误堆栈:\n{error_trace}\n")
-                sys.stdout.flush()
+                print(f"[Redis错误] 执行失败 (key={key}): {type(executor_error).__name__}: {executor_error}", flush=True)
                 raise
-            
-            print(f"[Redis] set 操作完成: {key}", flush=True)
             
         except redis.RedisError as e:
             error_msg = f"Redis连接错误 (key={key}): {e}"
             print(f"[Redis错误] {error_msg}", flush=True)
-            import traceback
-            traceback.print_exc()
             raise Exception(error_msg) from e
         except json.JSONEncodeError as e:
             error_msg = f"JSON序列化错误 (key={key}): {e}"
             print(f"[Redis错误] {error_msg}", flush=True)
-            import traceback
-            traceback.print_exc()
             raise Exception(error_msg) from e
         except Exception as e:
             error_msg = f"Redis set操作失败 (key={key}): {e}"
             print(f"[Redis错误] {error_msg}", flush=True)
-            import traceback
-            traceback.print_exc()
             raise Exception(error_msg) from e
     
     async def get(self, key: str) -> Optional[str]:
