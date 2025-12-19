@@ -667,15 +667,28 @@
                 <div 
                   v-for="(msg, index) in playerDiscussionMessages" 
                   :key="'player-' + index"
-                  :class="['message-bubble', msg.type || 'user']"
+                  :class="['message-bubble', msg.type || 'user', { 'is-own': isCurrentUser(msg.user_id) }]"
                 >
-                  <div class="message-avatar">
-                    <div class="avatar-icon-small">{{ getMessageAvatar(msg) }}</div>
-                  </div>
-                  <div class="message-content-wrapper">
-                    <div class="message-content" v-html="formatMessageContent(msg.content)"></div>
-                    <div class="message-sender">{{ msg.username || '玩家' }}</div>
-                  </div>
+                  <template v-if="isCurrentUser(msg.user_id)">
+                    <!-- 自己的消息：显示在右边，头像在消息气泡后面 -->
+                    <div class="message-content-wrapper own-message">
+                      <div class="message-content" v-html="formatMessageContent(msg.content)"></div>
+                      <div class="message-sender">{{ msg.username || '玩家' }}</div>
+                    </div>
+                    <div class="message-avatar">
+                      <div class="avatar-icon-small">{{ getMessageAvatar(msg) }}</div>
+                    </div>
+                  </template>
+                  <template v-else>
+                    <!-- 其他人的消息：显示在左边 -->
+                    <div class="message-avatar">
+                      <div class="avatar-icon-small">{{ getMessageAvatar(msg) }}</div>
+                    </div>
+                    <div class="message-content-wrapper">
+                      <div class="message-content" v-html="formatMessageContent(msg.content)"></div>
+                      <div class="message-sender">{{ msg.username || '玩家' }}</div>
+                    </div>
+                  </template>
                 </div>
               </div>
             </div>
@@ -3221,6 +3234,11 @@ export default {
   align-items: flex-start;
 }
 
+/* 自己的消息：右对齐，头像在消息气泡后面 */
+.message-bubble.is-own {
+  justify-content: flex-end;
+}
+
 .message-avatar {
   flex-shrink: 0;
 }
@@ -3240,6 +3258,14 @@ export default {
 .message-content-wrapper {
   flex: 1;
   min-width: 0;
+  max-width: 70%;
+}
+
+/* 自己的消息内容区域：右对齐 */
+.message-content-wrapper.own-message {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
 }
 
 .message-content {
@@ -3272,6 +3298,12 @@ export default {
   color: rgba(200, 200, 200, 0.7);
   font-size: 0.8em;
   margin-left: 5px;
+}
+
+/* 自己的消息发送者名称右对齐 */
+.message-content-wrapper.own-message .message-sender {
+  margin-left: 0;
+  margin-right: 5px;
 }
 
 .input-area {
@@ -3396,6 +3428,20 @@ export default {
 .player-messages .message-bubble.user .message-content {
   background: rgba(102, 126, 234, 0.2);
   border-color: rgba(102, 126, 234, 0.4);
+}
+
+/* 自己的消息：使用不同的背景色（类似微信的绿色） */
+.player-messages .message-bubble.is-own .message-content {
+  background: rgba(9, 187, 7, 0.3);
+  border-color: rgba(9, 187, 7, 0.5);
+  color: #ffffff;
+}
+
+/* 自己的消息发送者名称：右对齐 */
+.player-messages .message-bubble.is-own .message-sender {
+  text-align: right;
+  margin-right: 5px;
+  margin-left: 0;
 }
 
 /* 投票界面样式 */

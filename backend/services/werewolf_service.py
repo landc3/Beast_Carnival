@@ -171,6 +171,12 @@ class WerewolfService:
             player = Player(user_id=user_id, username=username, is_ai=False)
             room.players.append(player)
             
+            # 更新所有非AI玩家且username为"玩家"的名称，根据他们在房间中的位置设置为"玩家1"、"玩家2"等
+            for i, p in enumerate(room.players):
+                if not p.is_ai and p.username == "玩家":
+                    p.username = f"玩家{i + 1}"
+                    logger.info(f"【更新玩家名称】玩家 {p.user_id} 名称更新为: {p.username}")
+            
             logger.info(f"【加入房间】保存房间数据到Redis")
             
             await redis_service.set_room_data(room_id, room.model_dump())
@@ -264,6 +270,12 @@ class WerewolfService:
             
             room = GameRoom(**room_data)
             logger.info(f"房间 {room_id} - 玩家数量: {len(room.players)}")
+            
+            # 更新所有非AI玩家且username为"玩家"的名称，根据他们在房间中的位置设置为"玩家1"、"玩家2"等
+            for i, p in enumerate(room.players):
+                if not p.is_ai and p.username == "玩家":
+                    p.username = f"玩家{i + 1}"
+                    logger.info(f"【更新玩家名称】玩家 {p.user_id} 名称更新为: {p.username}")
             
             if len(room.players) < 4:  # 至少4人
                 logger.error(f"错误: 房间 {room_id} 玩家数量不足，当前: {len(room.players)}")
