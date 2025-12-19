@@ -1,6 +1,16 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 
+// 从环境变量获取后端地址，默认为 localhost:1998
+// 如果设置了 VITE_API_HOST，则使用该值（例如：192.168.1.100:1998）
+const API_HOST = process.env.VITE_API_HOST || 'localhost'
+const API_PORT = process.env.VITE_API_PORT || '1998'
+const API_BASE_URL = `http://${API_HOST}:${API_PORT}`
+const WS_BASE_URL = `ws://${API_HOST}:${API_PORT}`
+
+console.log('【前端配置】后端API地址:', API_BASE_URL)
+console.log('【前端配置】WebSocket地址:', WS_BASE_URL)
+
 export default defineConfig({
   plugins: [vue()],
   server: {
@@ -8,7 +18,7 @@ export default defineConfig({
     port: 4399,
     proxy: {
       '/api': {
-        target: 'http://localhost:1998',
+        target: API_BASE_URL,
         changeOrigin: true,
         secure: false,
         ws: false,
@@ -38,7 +48,7 @@ export default defineConfig({
         }
       },
       '/ws': {
-        target: 'ws://localhost:1998',
+        target: WS_BASE_URL,
         ws: true,
         changeOrigin: true,
         secure: false
