@@ -244,7 +244,7 @@ async def get_worldview():
         return {
             "title": "猛兽派对",
             "description": "欢迎来到猛兽派对——一切混乱、惊喜与爆笑的开端。",
-            "host_ai": "森罗",
+            "host_ai": "小爱",
             "intro": "你将从解锁第一个角色——丧彪（猫）开始，逐步揭开这个世界的秘密。",
             "item_count": 0
         }

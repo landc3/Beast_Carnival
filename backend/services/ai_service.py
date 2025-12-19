@@ -70,7 +70,7 @@ class AIService:
     @staticmethod
     def build_game_master_prompt() -> str:
         """构建游戏主持人的system prompt"""
-        return """你是《猛兽派对》游戏的主持AI：森罗。
+        return """你是《猛兽派对》游戏的主持AI：小爱。
 
 【核心身份】
 - 主游戏（AI 狼人杀）的主持人
